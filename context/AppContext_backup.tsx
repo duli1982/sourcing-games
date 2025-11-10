@@ -3,11 +3,7 @@ import React, { createContext, useState, useContext, ReactNode, useCallback, use
 import { Player, Page, Toast, ToastType } from '../types';
 import { fetchLeaderboard, syncPlayerRecord } from '../services/supabaseService';
 
-interface AppContextType {
-  player: Player | null;
-  setPlayer: (player: Player) => void;
-  leaderboard: Player[];
-  isLoadingLeaderboard: boolean;
+interface AppContextType {\n  player: Player | null;\n  setPlayer: (player: Player) => void;\n  leaderboard: Player[];\n  isLoadingLeaderboard: boolean;
   updateScore: (gameScore: number) => void;
   currentPage: Page;
   setCurrentPage: (page: Page) => void;
@@ -39,7 +35,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return initialLeaderboard;
     }
   });
-  const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -65,8 +60,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     let isMounted = true;
-    const loadLeaderboard = async () => {
-      setIsLoadingLeaderboard(true);
+    const loadLeaderboard = async () => {\n      setIsLoadingLeaderboard(true);
       const remoteLeaderboard = await fetchLeaderboard();
       if (!isMounted || !remoteLeaderboard) return;
 
@@ -82,11 +76,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       if (remoteLeaderboard.length === 0 && hasStoredLeaderboard) {
-        setIsLoadingLeaderboard(false);
         return;
       }
 
-      setLeaderboard(remoteLeaderboard);`r`n      setIsLoadingLeaderboard(false);`r`n    };
+      setLeaderboard(remoteLeaderboard);
+    };
 
     loadLeaderboard();
 
@@ -159,19 +153,6 @@ export const useAppContext = (): AppContextType => {
   }
   return context;
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
