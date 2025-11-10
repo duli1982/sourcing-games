@@ -55,7 +55,7 @@ const GameCard: React.FC<GameCardProps> = ({ game }) => {
     };
 
     return (
-        <div className="bg-gray-800 rounded-lg p-8 shadow-xl">
+        <div className="bg-gray-800 rounded-lg p-8 shadow-xl">\n            <details className="mb-4 bg-gray-700/60 rounded-md p-4">\n              <summary className="cursor-pointer text-sm text-gray-300">How we score (rubric)</summary>\n              <ul className="list-disc pl-5 text-sm text-gray-300 mt-2">\n                <li>Use of operators: quotes, AND/OR, parentheses</li>\n                <li>Precision: avoids noise and irrelevant results</li>\n                <li>Ethics: respects privacy and platform rules</li>\n              </ul>\n              <p className="text-xs text-gray-400 mt-2">Tip: include job-specific keywords and synonyms.</p>\n            </details>
             <h3 className="text-xl font-bold mb-2">{game.title}</h3>
             <p className="text-gray-400 mb-4">{game.description}</p>
             {game.context && (
@@ -104,3 +104,4 @@ const GameCard: React.FC<GameCardProps> = ({ game }) => {
 };
 
 export default GameCard;
+

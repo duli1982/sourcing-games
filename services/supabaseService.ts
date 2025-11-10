@@ -23,7 +23,7 @@ export const fetchLeaderboard = async (): Promise<Player[]> => {
 
   const { data, error } = await supabaseClient
     .from('players')
-    .select('name, score')
+    .select('id, name, score')
     .order('score', { ascending: false });
 
   if (error) {
@@ -31,7 +31,7 @@ export const fetchLeaderboard = async (): Promise<Player[]> => {
     return [];
   }
 
-  return data?.map((row) => ({ name: row.name, score: row.score ?? 0 })) ?? [];
+  return data?.map((row: any) => ({ id: row.id, name: row.name, score: row.score ?? 0 })) ?? [];
 };
 
 export const isNameTaken = async (name: string): Promise<boolean> => {
@@ -73,12 +73,7 @@ export const renamePlayer = async (
     const taken = await isNameTaken(newName);
     if (taken) return false;
     // create new record first
-    const { error: upsertError } = await supabaseClient.from('players').upsert({
-      name: newName,
-      score,
-      progress,
-      updated_at: new Date().toISOString(),
-    });
+    const { error: upsertError } = await supabaseClient.from('players').upsert({ id: (player as any).id, name: player.name, score: player.score, progress, updated_at: new Date().toISOString() }, { onConflict: 'id' });
     if (upsertError) throw upsertError;
     // delete the old record
     const { error: delError } = await supabaseClient.from('players').delete().eq('name', oldName);
@@ -99,16 +94,11 @@ export const syncPlayerRecord = async (
   }
 
   try {
-    await supabaseClient.from('players').upsert(
-      {
-        name: player.name,
-        score: player.score,
-        progress,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'name' }
-    );
+    await supabaseClient.from('players').upsert({ id: (player as any).id, name: player.name, score: player.score, progress, updated_at: new Date().toISOString() }, { onConflict: 'id' });
   } catch (error) {
     console.error('Failed to sync player record to Supabase:', error);
   }
 };
+
+
+
