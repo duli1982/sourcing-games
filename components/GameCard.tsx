@@ -59,6 +59,13 @@ const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
     const handleConfirmedSubmit = async () => {
         if (!submission.trim() || !player) return;
 
+        // Validate player has an ID before submitting
+        if (!player.id) {
+            addToast('Your account is not properly set up. Please refresh the page and try again.', 'error');
+            setShowConfirmation(false);
+            return;
+        }
+
         // Close confirmation modal
         setShowConfirmation(false);
 

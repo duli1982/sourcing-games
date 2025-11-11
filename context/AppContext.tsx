@@ -87,12 +87,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           }
         } else {
           // 3. Fallback to localStorage cache only (for offline use)
+          // IMPORTANT: Only load cached player if it has a valid ID
           try {
             const cachedPlayer = window.localStorage.getItem('player');
             if (cachedPlayer && isMounted) {
               const parsedPlayer = JSON.parse(cachedPlayer);
-              setPlayerState(parsedPlayer);
-              console.warn('Loaded player from cache (offline mode)');
+
+              // Validate that cached player has an ID
+              if (parsedPlayer.id) {
+                setPlayerState(parsedPlayer);
+                console.warn('Loaded player from cache (offline mode)');
+              } else {
+                // Player without ID is invalid - clear it
+                console.warn('Cached player has no ID, clearing invalid cache');
+                window.localStorage.removeItem('player');
+                window.localStorage.removeItem('playerId');
+              }
             }
           } catch (error) {
             console.error('Failed to parse cached player:', error);
@@ -279,7 +289,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const unlockAchievement = useCallback((achievementId: string) => {
     setPlayerState(prevPlayer => {
-      if (!prevPlayer) return null;
+      if (!prevPlayer || !prevPlayer.id) {
+        console.error('Cannot unlock achievement: Player has no ID');
+        return prevPlayer;
+      }
 
       // Check if achievement is already unlocked
       if (prevPlayer.achievements?.some(a => a.id === achievementId)) {
@@ -321,7 +334,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addAttempt = useCallback((attempt: Attempt) => {
     setPlayerState(prevPlayer => {
-      if (!prevPlayer) return null;
+      if (!prevPlayer || !prevPlayer.id) {
+        console.error('Cannot add attempt: Player has no ID');
+        return prevPlayer;
+      }
       const updatedAttempts = [...(prevPlayer.attempts || []), attempt];
       const updatedPlayer = { ...prevPlayer, attempts: updatedAttempts };
 
