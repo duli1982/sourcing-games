@@ -24,10 +24,10 @@ export const fetchLeaderboard = async (page: number = 1, pageSize: number = 50):
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  // Fetch paginated data with total count
+  // Fetch paginated data with total count (including progress for time-based filtering)
   const { data, error, count } = await supabaseClient
     .from('players')
-    .select('id, name, score', { count: 'exact' })
+    .select('id, name, score, progress', { count: 'exact' })
     .order('score', { ascending: false })
     .range(from, to);
 
@@ -36,7 +36,13 @@ export const fetchLeaderboard = async (page: number = 1, pageSize: number = 50):
     return { players: [], total: 0 };
   }
 
-  const players = data?.map((row: any) => ({ id: row.id, name: row.name, score: row.score ?? 0 })) ?? [];
+  const players = data?.map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    score: row.score ?? 0,
+    attempts: row.progress?.attempts || [],
+    achievements: row.progress?.achievements || []
+  })) ?? [];
 
   return { players, total: count ?? 0 };
 };
