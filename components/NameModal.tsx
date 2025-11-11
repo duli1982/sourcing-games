@@ -8,6 +8,7 @@ const NameModal: React.FC = () => {
   const [checking, setChecking] = useState(false);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   const { setPlayer, addToast } = useAppContext();
 
   const checkAvailability = async (candidate: string) => {
@@ -49,7 +50,7 @@ const NameModal: React.FC = () => {
     debounceTimer = window.setTimeout(() => checkAvailability(v), 350);
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmedName = name.trim();
 
@@ -84,8 +85,17 @@ const NameModal: React.FC = () => {
       return;
     }
 
-    setPlayer({ name: trimmedName, score: 0, attempts: [] });
-    addToast(`Welcome, ${trimmedName}! Ready to test your sourcing skills?`, 'success');
+    // Create player in Supabase
+    setIsCreating(true);
+    try {
+      await setPlayer({ name: trimmedName, score: 0, attempts: [] });
+      addToast(`Welcome, ${trimmedName}! Ready to test your sourcing skills?`, 'success');
+    } catch (error) {
+      console.error('Failed to create player:', error);
+      addToast('Failed to create account. Please try again.', 'error');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -131,10 +141,10 @@ const NameModal: React.FC = () => {
           )}
           <button
             type="submit"
-            disabled={available === false || checking || validationError !== null || available === null}
+            disabled={available === false || checking || validationError !== null || available === null || isCreating}
             className="w-full mt-4 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed"
           >
-            Start Sourcing!
+            {isCreating ? 'Creating Account...' : 'Start Sourcing!'}
           </button>
         </form>
       </div>

@@ -14,7 +14,7 @@ import { Page } from './types';
 const TUTORIAL_COMPLETED_KEY = 'ai-sourcing-tutorial-completed';
 
 const App: React.FC = () => {
-  const { player, currentPage, setCurrentPage, toasts } = useAppContext();
+  const { player, isLoadingPlayer, currentPage, setCurrentPage, toasts } = useAppContext();
   const [showTutorial, setShowTutorial] = useState(false);
 
   // Check if user has completed tutorial
@@ -39,6 +39,18 @@ const App: React.FC = () => {
   const handleOpenTutorial = () => {
     setShowTutorial(true);
   };
+
+  // Show loading screen while fetching player from Supabase
+  if (isLoadingPlayer) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+          <p className="text-gray-400 text-lg">Loading your profile...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!player) {
     return <NameModal />;

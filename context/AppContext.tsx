@@ -1,15 +1,16 @@
 
 import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
 import { Player, Page, Toast, ToastType, Attempt, PlayerStats, Achievement } from '../types';
-import { fetchLeaderboard, syncPlayerRecord } from '../services/supabaseService';
+import { fetchLeaderboard, fetchPlayerById, createPlayer, updatePlayer } from '../services/supabaseService';
 import { checkNewAchievements } from '../data/achievements';
 
 interface AppContextType {
   player: Player | null;
-  setPlayer: (player: Player) => void;
+  setPlayer: (player: Player) => Promise<void>;
+  isLoadingPlayer: boolean;
   leaderboard: Player[];
   isLoadingLeaderboard: boolean;
-  updateScore: (gameScore: number) => void;
+  updateScore: (gameScore: number) => Promise<void>;
   currentPage: Page;
   setCurrentPage: (page: Page) => void;
   toasts: Toast[];
@@ -25,15 +26,8 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const initialLeaderboard: Player[] = [];
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [player, setPlayerState] = useState<Player | null>(() => {
-      try {
-          const item = window.localStorage.getItem('player');
-          return item ? JSON.parse(item) : null;
-      } catch (error) {
-          console.error("Failed to parse player from localStorage", error);
-          return null;
-      }
-  });
+  const [player, setPlayerState] = useState<Player | null>(null);
+  const [isLoadingPlayer, setIsLoadingPlayer] = useState<boolean>(true);
   const [leaderboard, setLeaderboard] = useState<Player[]>(() => {
     try {
         const item = window.localStorage.getItem('leaderboard');
@@ -66,6 +60,59 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error("Failed to save leaderboard to localStorage", error);
     }
   }, [leaderboard]);
+
+  // Load player from Supabase on mount (Hybrid: Supabase primary, localStorage cache)
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPlayer = async () => {
+      setIsLoadingPlayer(true);
+
+      try {
+        // 1. Try to get stored player ID from localStorage
+        const storedPlayerId = window.localStorage.getItem('playerId');
+
+        if (storedPlayerId) {
+          // 2. Fetch player from Supabase by ID (source of truth)
+          const playerData = await fetchPlayerById(storedPlayerId);
+
+          if (isMounted && playerData) {
+            setPlayerState(playerData);
+            // Update localStorage cache
+            window.localStorage.setItem('player', JSON.stringify(playerData));
+          } else if (isMounted && !playerData) {
+            // Player not found in DB, clear localStorage
+            window.localStorage.removeItem('playerId');
+            window.localStorage.removeItem('player');
+          }
+        } else {
+          // 3. Fallback to localStorage cache only (for offline use)
+          try {
+            const cachedPlayer = window.localStorage.getItem('player');
+            if (cachedPlayer && isMounted) {
+              const parsedPlayer = JSON.parse(cachedPlayer);
+              setPlayerState(parsedPlayer);
+              console.warn('Loaded player from cache (offline mode)');
+            }
+          } catch (error) {
+            console.error('Failed to parse cached player:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading player:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoadingPlayer(false);
+        }
+      }
+    };
+
+    loadPlayer();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -101,48 +148,111 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, []);
 
-  const persistPlayerToRemote = useCallback(async (playerToSave: Player, progress?: Record<string, unknown>) => {
-    await syncPlayerRecord(playerToSave, progress);
-  }, []);
-
-
-  const setPlayer = (newPlayer: Player) => {
+  // Async setPlayer: Creates player in Supabase first, with optimistic updates
+  const setPlayer = useCallback(async (newPlayer: Player) => {
+    // Optimistic update (update UI immediately)
     setPlayerState(newPlayer);
-    setLeaderboard(prev => {
-        const existingPlayer = prev.find(p => p.name.toLowerCase() === newPlayer.name.toLowerCase());
-        if (!existingPlayer) {
-            return [...prev, newPlayer].sort((a, b) => b.score - a.score);
-        }
-        return prev;
-    });
-    persistPlayerToRemote(newPlayer);
-    };
-  
-  const updateScore = useCallback((gameScore: number) => {
-    if (!player) return;
+    window.localStorage.setItem('player', JSON.stringify(newPlayer));
 
-    let newTotalScore = 0;
-    setLeaderboard(prev => {
-        const updatedLeaderboard = prev.map(p => {
-            if (p.name === player.name) {
-                newTotalScore = p.score + gameScore;
-                return { ...p, score: newTotalScore };
-            }
-            return p;
+    try {
+      let savedPlayer: Player | null;
+
+      if (newPlayer.id) {
+        // Update existing player in Supabase
+        savedPlayer = await updatePlayer(newPlayer);
+      } else {
+        // Create new player in Supabase
+        savedPlayer = await createPlayer(newPlayer.name);
+      }
+
+      if (savedPlayer) {
+        // Update with server response (includes DB-generated ID)
+        setPlayerState(savedPlayer);
+        window.localStorage.setItem('playerId', savedPlayer.id!);
+        window.localStorage.setItem('player', JSON.stringify(savedPlayer));
+
+        // Update leaderboard
+        setLeaderboard(prev => {
+          const existingIndex = prev.findIndex(p => p.id === savedPlayer!.id || p.name.toLowerCase() === savedPlayer!.name.toLowerCase());
+          if (existingIndex >= 0) {
+            // Update existing player
+            const updated = [...prev];
+            updated[existingIndex] = savedPlayer!;
+            return updated.sort((a, b) => b.score - a.score);
+          } else {
+            // Add new player
+            return [...prev, savedPlayer!].sort((a, b) => b.score - a.score);
+          }
         });
-        return updatedLeaderboard.sort((a, b) => b.score - a.score);
-    });
+      } else {
+        // Supabase save failed - keep optimistic update but warn
+        addToast('Failed to save player data. Changes saved locally only.', 'error');
+      }
+    } catch (error) {
+      console.error('Error saving player:', error);
+      addToast('Network error. Changes saved locally only.', 'error');
+    }
+  }, []);
+  
+  // Async updateScore: Optimistic update with rollback on failure
+  const updateScore = useCallback(async (gameScore: number) => {
+    if (!player || !player.id) {
+      addToast('Player not loaded. Please refresh the page.', 'error');
+      return;
+    }
 
-    setPlayerState(prevPlayer => {
-      if(!prevPlayer) return null;
-      const updatedPlayer: Player = { ...prevPlayer, score: newTotalScore };
-      persistPlayerToRemote(updatedPlayer, {
-        lastGameScore: gameScore,
-        updatedAt: new Date().toISOString(),
-      });
-      return updatedPlayer;
-    });
-  }, [player, persistPlayerToRemote]);
+    const oldScore = player.score;
+    const newScore = oldScore + gameScore;
+
+    // Optimistic update
+    const optimisticPlayer = { ...player, score: newScore };
+    setPlayerState(optimisticPlayer);
+    window.localStorage.setItem('player', JSON.stringify(optimisticPlayer));
+
+    // Optimistic leaderboard update
+    setLeaderboard(prev =>
+      prev.map(p => p.id === player.id ? optimisticPlayer : p)
+        .sort((a, b) => b.score - a.score)
+    );
+
+    try {
+      // Update Supabase (source of truth)
+      const savedPlayer = await updatePlayer(optimisticPlayer);
+
+      if (savedPlayer) {
+        // Confirm with server data
+        setPlayerState(savedPlayer);
+        window.localStorage.setItem('player', JSON.stringify(savedPlayer));
+
+        // Update leaderboard with confirmed data
+        setLeaderboard(prev =>
+          prev.map(p => p.id === savedPlayer.id ? savedPlayer : p)
+            .sort((a, b) => b.score - a.score)
+        );
+      } else {
+        // Rollback on failure
+        const rolledBackPlayer = { ...player, score: oldScore };
+        setPlayerState(rolledBackPlayer);
+        window.localStorage.setItem('player', JSON.stringify(rolledBackPlayer));
+        setLeaderboard(prev =>
+          prev.map(p => p.id === player.id ? rolledBackPlayer : p)
+            .sort((a, b) => b.score - a.score)
+        );
+        addToast('Failed to update score. Please try again.', 'error');
+      }
+    } catch (error) {
+      // Rollback on error
+      const rolledBackPlayer = { ...player, score: oldScore };
+      setPlayerState(rolledBackPlayer);
+      window.localStorage.setItem('player', JSON.stringify(rolledBackPlayer));
+      setLeaderboard(prev =>
+        prev.map(p => p.id === player.id ? rolledBackPlayer : p)
+          .sort((a, b) => b.score - a.score)
+      );
+      console.error('Error updating score:', error);
+      addToast('Network error. Score update failed.', 'error');
+    }
+  }, [player]);
 
   const addToast = (message: string, type: ToastType) => {
     const id = Date.now();
@@ -178,14 +288,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const updatedAchievements = [...(prevPlayer.achievements || []), newAchievement];
       const updatedPlayer = { ...prevPlayer, achievements: updatedAchievements };
 
-      persistPlayerToRemote(updatedPlayer, {
-        achievements: updatedAchievements,
-        achievementUnlockedAt: new Date().toISOString(),
-      });
+      // Sync to Supabase (async, non-blocking)
+      if (updatedPlayer.id) {
+        updatePlayer(updatedPlayer).then(savedPlayer => {
+          if (savedPlayer) {
+            window.localStorage.setItem('player', JSON.stringify(savedPlayer));
+          }
+        }).catch(error => {
+          console.error('Failed to sync achievement to Supabase:', error);
+        });
+      }
 
+      // Update localStorage immediately
+      window.localStorage.setItem('player', JSON.stringify(updatedPlayer));
       return updatedPlayer;
     });
-  }, [persistPlayerToRemote]);
+  }, []);
 
   const addAttempt = useCallback((attempt: Attempt) => {
     setPlayerState(prevPlayer => {
@@ -206,13 +324,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       }
 
-      persistPlayerToRemote(updatedPlayer, {
-        attempts: updatedAttempts,
-        lastAttemptAt: new Date().toISOString(),
-      });
+      // Sync to Supabase (async, non-blocking)
+      if (updatedPlayer.id) {
+        updatePlayer(updatedPlayer).then(savedPlayer => {
+          if (savedPlayer) {
+            window.localStorage.setItem('player', JSON.stringify(savedPlayer));
+          }
+        }).catch(error => {
+          console.error('Failed to sync attempt to Supabase:', error);
+        });
+      }
+
+      // Update localStorage immediately
+      window.localStorage.setItem('player', JSON.stringify(updatedPlayer));
       return updatedPlayer;
     });
-  }, [persistPlayerToRemote, unlockAchievement, addToast]);
+  }, [unlockAchievement]);
 
   const getPlayerStats = useCallback((): PlayerStats => {
     if (!player || !player.attempts || player.attempts.length === 0) {
@@ -259,7 +386,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, [player]);
 
-  const value = { player, setPlayer, leaderboard, isLoadingLeaderboard,  updateScore, currentPage, setCurrentPage, toasts, addToast, removeToast, addAttempt, getPlayerStats, unlockAchievement };
+  const value = { player, setPlayer, isLoadingPlayer, leaderboard, isLoadingLeaderboard, updateScore, currentPage, setCurrentPage, toasts, addToast, removeToast, addAttempt, getPlayerStats, unlockAchievement };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
     };

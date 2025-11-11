@@ -102,5 +102,125 @@ export const syncPlayerRecord = async (
   }
 };
 
+/**
+ * Fetch player by ID (primary key lookup)
+ * Returns player with attempts and achievements from progress JSONB field
+ */
+export const fetchPlayerById = async (id: string): Promise<Player | null> => {
+  if (!ensureConfig() || !supabaseClient) {
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('players')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Not found
+        return null;
+      }
+      console.error('Failed to fetch player by ID:', error);
+      return null;
+    }
+
+    return {
+      id: data.id,
+      name: data.name,
+      score: data.score ?? 0,
+      attempts: data.progress?.attempts || [],
+      achievements: data.progress?.achievements || []
+    };
+  } catch (error) {
+    console.error('Error fetching player:', error);
+    return null;
+  }
+};
+
+/**
+ * Create new player in Supabase
+ * Returns player with DB-generated UUID
+ */
+export const createPlayer = async (name: string): Promise<Player | null> => {
+  if (!ensureConfig() || !supabaseClient) {
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('players')
+      .insert({
+        name,
+        score: 0,
+        progress: { attempts: [], achievements: [] },
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Failed to create player:', error);
+      return null;
+    }
+
+    return {
+      id: data.id,
+      name: data.name,
+      score: data.score ?? 0,
+      attempts: [],
+      achievements: []
+    };
+  } catch (error) {
+    console.error('Error creating player:', error);
+    return null;
+  }
+};
+
+/**
+ * Update existing player in Supabase
+ * Returns updated player data from server
+ */
+export const updatePlayer = async (player: Player): Promise<Player | null> => {
+  if (!ensureConfig() || !supabaseClient || !player.id) {
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('players')
+      .update({
+        name: player.name,
+        score: player.score,
+        progress: {
+          attempts: player.attempts,
+          achievements: player.achievements
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', player.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Failed to update player:', error);
+      return null;
+    }
+
+    return {
+      id: data.id,
+      name: data.name,
+      score: data.score ?? 0,
+      attempts: data.progress?.attempts || [],
+      achievements: data.progress?.achievements || []
+    };
+  } catch (error) {
+    console.error('Error updating player:', error);
+    return null;
+  }
+};
+
 
 
