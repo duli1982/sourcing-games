@@ -118,8 +118,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let isMounted = true;
     const loadLeaderboard = async () => {
       setIsLoadingLeaderboard(true);
-      const remoteLeaderboard = await fetchLeaderboard();
-      if (!isMounted || !remoteLeaderboard) return;
+      const { players: remoteLeaderboard } = await fetchLeaderboard(1, 50);
+      if (!isMounted) return;
 
       let hasStoredLeaderboard = false;
       try {
