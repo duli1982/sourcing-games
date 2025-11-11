@@ -150,27 +150,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Async setPlayer: Creates player in Supabase first, with optimistic updates
   const setPlayer = useCallback(async (newPlayer: Player) => {
-    // Optimistic update (update UI immediately)
-    setPlayerState(newPlayer);
-    window.localStorage.setItem('player', JSON.stringify(newPlayer));
-
     try {
       let savedPlayer: Player | null;
 
       if (newPlayer.id) {
         // Update existing player in Supabase
+        // Use optimistic update for existing players (they already have a valid ID)
+        setPlayerState(newPlayer);
+        window.localStorage.setItem('player', JSON.stringify(newPlayer));
+
         savedPlayer = await updatePlayer(newPlayer);
+
+        if (savedPlayer) {
+          // Confirm with server response
+          setPlayerState(savedPlayer);
+          window.localStorage.setItem('player', JSON.stringify(savedPlayer));
+        } else {
+          // Rollback on failure
+          addToast('Failed to update player data. Please try again.', 'error');
+        }
       } else {
         // Create new player in Supabase
+        // DO NOT use optimistic update - wait for DB confirmation with ID first
         savedPlayer = await createPlayer(newPlayer.name);
-      }
 
-      if (savedPlayer) {
-        // Update with server response (includes DB-generated ID)
+        if (!savedPlayer) {
+          // Database save failed - do not set player state
+          addToast('Failed to create account. Please try again.', 'error');
+          throw new Error('Failed to create player in database');
+        }
+
+        // Now that we have a player with ID from database, set the state
         setPlayerState(savedPlayer);
         window.localStorage.setItem('playerId', savedPlayer.id!);
         window.localStorage.setItem('player', JSON.stringify(savedPlayer));
+      }
 
+      if (savedPlayer) {
         // Update leaderboard
         setLeaderboard(prev => {
           const existingIndex = prev.findIndex(p => p.id === savedPlayer!.id || p.name.toLowerCase() === savedPlayer!.name.toLowerCase());
@@ -184,13 +200,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return [...prev, savedPlayer!].sort((a, b) => b.score - a.score);
           }
         });
-      } else {
-        // Supabase save failed - keep optimistic update but warn
-        addToast('Failed to save player data. Changes saved locally only.', 'error');
       }
     } catch (error) {
       console.error('Error saving player:', error);
-      addToast('Network error. Changes saved locally only.', 'error');
+      addToast('Failed to create account. Please try again.', 'error');
+      throw error; // Re-throw so NameModal can handle it
     }
   }, []);
   
