@@ -64,6 +64,46 @@ export const isNameTaken = async (name: string): Promise<boolean> => {
   return Boolean(data);
 };
 
+/**
+ * Fetch player by name (case-insensitive)
+ * Used for "logging in" with an existing name
+ */
+export const fetchPlayerByName = async (name: string): Promise<Player | null> => {
+  if (!ensureConfig() || !supabaseClient) {
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('players')
+      .select('*')
+      .ilike('name', name)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Not found
+        return null;
+      }
+      console.error('Failed to fetch player by name:', error);
+      return null;
+    }
+
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      name: data.name,
+      score: data.score ?? 0,
+      attempts: data.progress?.attempts || [],
+      achievements: data.progress?.achievements || []
+    };
+  } catch (error) {
+    console.error('Error fetching player by name:', error);
+    return null;
+  }
+};
+
 export const deletePlayer = async (name: string): Promise<void> => {
   if (!ensureConfig() || !supabaseClient) {
     return;

@@ -67,32 +67,36 @@ const NameModal: React.FC = () => {
       return;
     }
 
-    // Check if name is already taken
-    if (available === false) {
-      addToast('This name is already taken (case-insensitive). Please choose another.', 'error');
-      return;
-    }
-
     // Check if availability check is still in progress
     if (checking) {
       addToast('Please wait while we check name availability', 'error');
       return;
     }
 
-    // Check if we haven't validated availability yet
-    if (available === null) {
-      addToast('Please wait for name validation to complete', 'error');
-      return;
-    }
-
-    // Create player in Supabase
     setIsCreating(true);
     try {
-      await setPlayer({ name: trimmedName, score: 0, attempts: [] });
-      addToast(`Welcome, ${trimmedName}! Ready to test your sourcing skills?`, 'success');
+      // Check if name is already taken (existing player)
+      if (available === false) {
+        // Name exists - log in as that player
+        const existingPlayer = await (await import('../services/supabaseService')).fetchPlayerByName(trimmedName);
+
+        if (existingPlayer) {
+          await setPlayer(existingPlayer);
+          addToast(`Welcome back, ${existingPlayer.name}! Your score: ${existingPlayer.score} points`, 'success');
+        } else {
+          addToast('Player not found. Please try again.', 'error');
+        }
+      } else if (available === true) {
+        // Name is available - create new player
+        await setPlayer({ name: trimmedName, score: 0, attempts: [] });
+        addToast(`Welcome, ${trimmedName}! Ready to test your sourcing skills?`, 'success');
+      } else {
+        // Availability check hasn't completed
+        addToast('Please wait for name validation to complete', 'error');
+      }
     } catch (error) {
-      console.error('Failed to create player:', error);
-      addToast('Failed to create account. Please try again.', 'error');
+      console.error('Failed to login/create player:', error);
+      addToast('Failed to login/create account. Please try again.', 'error');
     } finally {
       setIsCreating(false);
     }
@@ -113,7 +117,7 @@ const NameModal: React.FC = () => {
               className={`w-full bg-gray-700 border rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 ${
                 validationError ? 'border-red-500 focus:ring-red-500' :
                 available === true ? 'border-green-500 focus:ring-green-500' :
-                available === false ? 'border-red-500 focus:ring-red-500' :
+                available === false ? 'border-cyan-500 focus:ring-cyan-500' :
                 'border-gray-600 focus:ring-cyan-500'
               }`}
               required
@@ -127,10 +131,10 @@ const NameModal: React.FC = () => {
               <span className="absolute right-3 top-3 text-red-400 text-sm">✗ Invalid</span>
             )}
             {!checking && !validationError && available === true && (
-              <span className="absolute right-3 top-3 text-green-400 text-sm">✓ Available</span>
+              <span className="absolute right-3 top-3 text-green-400 text-sm">✓ New player</span>
             )}
             {!checking && !validationError && available === false && (
-              <span className="absolute right-3 top-3 text-red-400 text-sm">✗ Taken</span>
+              <span className="absolute right-3 top-3 text-cyan-400 text-sm">✓ Existing player</span>
             )}
           </div>
           {validationError && (
@@ -141,10 +145,13 @@ const NameModal: React.FC = () => {
           )}
           <button
             type="submit"
-            disabled={available === false || checking || validationError !== null || available === null || isCreating}
+            disabled={checking || validationError !== null || available === null || isCreating}
             className="w-full mt-4 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed"
           >
-            {isCreating ? 'Creating Account...' : 'Start Sourcing!'}
+            {isCreating
+              ? (available === false ? 'Logging in...' : 'Creating Account...')
+              : (available === false ? 'Login' : 'Create Account')
+            }
           </button>
         </form>
       </div>
