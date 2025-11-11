@@ -16,22 +16,29 @@ const ensureConfig = () => {
   return Boolean(supabaseClient);
 };
 
-export const fetchLeaderboard = async (): Promise<Player[]> => {
+export const fetchLeaderboard = async (page: number = 1, pageSize: number = 50): Promise<{ players: Player[], total: number }> => {
   if (!ensureConfig() || !supabaseClient) {
-    return [];
+    return { players: [], total: 0 };
   }
 
-  const { data, error } = await supabaseClient
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  // Fetch paginated data with total count
+  const { data, error, count } = await supabaseClient
     .from('players')
-    .select('id, name, score')
-    .order('score', { ascending: false });
+    .select('id, name, score', { count: 'exact' })
+    .order('score', { ascending: false })
+    .range(from, to);
 
   if (error) {
     console.error('Failed to fetch leaderboard from Supabase:', error);
-    return [];
+    return { players: [], total: 0 };
   }
 
-  return data?.map((row: any) => ({ id: row.id, name: row.name, score: row.score ?? 0 })) ?? [];
+  const players = data?.map((row: any) => ({ id: row.id, name: row.name, score: row.score ?? 0 })) ?? [];
+
+  return { players, total: count ?? 0 };
 };
 
 export const isNameTaken = async (name: string): Promise<boolean> => {
