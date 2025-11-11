@@ -5,6 +5,7 @@ import { Page } from '../types';
 interface HeaderProps {
     onNavigate: (page: Page) => void;
     currentPage: Page;
+    onOpenTutorial: () => void;
 }
 
 const navItems: { page: Page; label: string }[] = [
@@ -14,7 +15,7 @@ const navItems: { page: Page; label: string }[] = [
     { page: 'profile', label: 'Profile' },
 ];
 
-const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage }) => {
+const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial }) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const handleNavClick = (page: Page) => {
@@ -29,16 +30,24 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage }) => {
                     <h1 className="text-2xl font-bold text-white">AI Sourcing Quiz</h1>
                     <p className="text-sm text-cyan-400">Powered by DG & Gemini</p>
                 </div>
-                <div className="hidden md:flex space-x-2">
+                <div className="hidden md:flex space-x-2 items-center">
                     {navItems.map(item => (
-                         <button 
-                            key={item.page} 
-                            onClick={() => handleNavClick(item.page)} 
+                         <button
+                            key={item.page}
+                            onClick={() => handleNavClick(item.page)}
                             className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${currentPage === item.page ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
                         >
                             {item.label}
                         </button>
                     ))}
+                    <button
+                        onClick={onOpenTutorial}
+                        className="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors duration-200 flex items-center gap-1"
+                        title="Open Tutorial"
+                    >
+                        <span>❓</span>
+                        <span>Help</span>
+                    </button>
                 </div>
                 <div className="md:hidden">
                     <button id="mobileMenuButton" aria-label="Open menu" className="text-white focus:outline-none" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
@@ -50,14 +59,20 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage }) => {
             {isMobileMenuOpen && (
                  <div className="md:hidden">
                     {navItems.map(item => (
-                        <button 
-                            key={item.page} 
-                            onClick={() => handleNavClick(item.page)} 
+                        <button
+                            key={item.page}
+                            onClick={() => handleNavClick(item.page)}
                             className={`block w-full text-left py-2 px-4 text-sm  transition-colors duration-200 ${currentPage === item.page ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
                         >
                             {item.label}
                         </button>
                     ))}
+                    <button
+                        onClick={() => { onOpenTutorial(); setIsMobileMenuOpen(false); }}
+                        className="block w-full text-left py-2 px-4 text-sm text-gray-300 hover:bg-gray-700 transition-colors duration-200"
+                    >
+                        ❓ Help
+                    </button>
                 </div>
             )}
         </header>
