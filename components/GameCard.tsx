@@ -15,7 +15,7 @@ interface GameCardProps {
 const COOLDOWN_MS = 30000; // 30 seconds
 
 const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
-    const { player, updateScore, addToast, addAttempt } = useAppContext();
+    const { player, addToast, submitGameResult } = useAppContext();
     const [submission, setSubmission] = useState('');
     const [feedback, setFeedback] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -78,10 +78,9 @@ const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
             let score = 0;
             if (scoreMatch) {
                 score = parseInt(scoreMatch[1], 10);
-                updateScore(score);
 
-                // Save attempt to history
-                addAttempt({
+                // Submit score and attempt atomically (prevents race conditions)
+                await submitGameResult(score, {
                     gameId: game.id,
                     gameTitle: game.title,
                     submission: submission,
@@ -90,8 +89,6 @@ const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
                     ts: new Date().toISOString(),
                     feedback: responseText
                 });
-
-                addToast(`Score updated! +${score} points`, 'success');
             }
 
             // Use the enhanced feedback formatter

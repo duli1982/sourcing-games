@@ -17,6 +17,7 @@ interface AppContextType {
   addToast: (message: string, type: ToastType) => void;
   removeToast: (id: number) => void;
   addAttempt: (attempt: Attempt) => void;
+  submitGameResult: (gameScore: number, attempt: Attempt) => Promise<void>;
   getPlayerStats: () => PlayerStats;
   unlockAchievement: (achievementId: string) => void;
 }
@@ -154,23 +155,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPlayerState(newPlayer);
     window.localStorage.setItem('player', JSON.stringify(newPlayer));
 
+    // CRITICAL: Save playerId immediately if it exists, don't wait for Supabase confirmation
+    // This ensures the user can continue playing even if network fails
+    if (newPlayer.id) {
+      window.localStorage.setItem('playerId', newPlayer.id);
+    }
+
     try {
       let savedPlayer: Player | null;
 
       if (newPlayer.id) {
-        // Update existing player in Supabase
-        savedPlayer = await updatePlayer(newPlayer);
+        // Player already exists - just update state, don't sync to Supabase yet
+        // Supabase will be updated when score/attempts change
+        savedPlayer = newPlayer;
       } else {
         // Create new player in Supabase
         savedPlayer = await createPlayer(newPlayer.name);
+
+        if (savedPlayer) {
+          // Update state with server-generated ID
+          setPlayerState(savedPlayer);
+          window.localStorage.setItem('playerId', savedPlayer.id!);
+          window.localStorage.setItem('player', JSON.stringify(savedPlayer));
+        }
       }
 
-      if (savedPlayer) {
-        // Update with server response (includes DB-generated ID)
-        setPlayerState(savedPlayer);
-        window.localStorage.setItem('playerId', savedPlayer.id!);
-        window.localStorage.setItem('player', JSON.stringify(savedPlayer));
-
+      if (savedPlayer && savedPlayer.id) {
         // Update leaderboard
         setLeaderboard(prev => {
           const existingIndex = prev.findIndex(p => p.id === savedPlayer!.id || p.name.toLowerCase() === savedPlayer!.name.toLowerCase());
@@ -184,13 +194,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return [...prev, savedPlayer!].sort((a, b) => b.score - a.score);
           }
         });
-      } else {
-        // Supabase save failed - keep optimistic update but warn
-        addToast('Failed to save player data. Changes saved locally only.', 'error');
+      } else if (!newPlayer.id) {
+        // Only show error if we were trying to create a NEW player and it failed
+        addToast('Failed to create account. Please try again.', 'error');
       }
     } catch (error) {
       console.error('Error saving player:', error);
-      addToast('Network error. Changes saved locally only.', 'error');
+      if (!newPlayer.id) {
+        // Only show error toast for new player creation failures
+        addToast('Network error. Failed to create account.', 'error');
+      }
     }
   }, []);
   
@@ -341,6 +354,65 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   }, [unlockAchievement]);
 
+  // Combined function to update score AND add attempt atomically
+  // This prevents race conditions between updateScore and addAttempt
+  const submitGameResult = useCallback(async (gameScore: number, attempt: Attempt) => {
+    if (!player || !player.id) {
+      addToast('Player not loaded. Please refresh the page.', 'error');
+      return;
+    }
+
+    const oldScore = player.score;
+    const newScore = oldScore + gameScore;
+
+    // Create updated player with both new score and new attempt
+    const updatedPlayer = {
+      ...player,
+      score: newScore,
+      attempts: [...(player.attempts || []), attempt]
+    };
+
+    // Optimistic update
+    setPlayerState(updatedPlayer);
+    window.localStorage.setItem('player', JSON.stringify(updatedPlayer));
+
+    // Check for new achievements
+    const newAchievements = checkNewAchievements(updatedPlayer);
+    if (newAchievements.length > 0) {
+      newAchievements.forEach(achievement => {
+        addToast(`🎉 Achievement Unlocked: ${achievement.name}!`, 'success');
+        setTimeout(() => {
+          unlockAchievement(achievement.id);
+        }, 100);
+      });
+    }
+
+    try {
+      // Single atomic update to Supabase
+      const savedPlayer = await updatePlayer(updatedPlayer);
+
+      if (savedPlayer) {
+        // Confirm with server data
+        setPlayerState(savedPlayer);
+        window.localStorage.setItem('player', JSON.stringify(savedPlayer));
+        addToast(`Score updated! +${gameScore} points`, 'success');
+      } else {
+        // Rollback on failure
+        const rolledBackPlayer = { ...player, score: oldScore };
+        setPlayerState(rolledBackPlayer);
+        window.localStorage.setItem('player', JSON.stringify(rolledBackPlayer));
+        addToast('Failed to update score. Please try again.', 'error');
+      }
+    } catch (error) {
+      // Rollback on error
+      const rolledBackPlayer = { ...player, score: oldScore };
+      setPlayerState(rolledBackPlayer);
+      window.localStorage.setItem('player', JSON.stringify(rolledBackPlayer));
+      console.error('Error updating score:', error);
+      addToast('Network error. Score update failed.', 'error');
+    }
+  }, [player, unlockAchievement]);
+
   const getPlayerStats = useCallback((): PlayerStats => {
     if (!player || !player.attempts || player.attempts.length === 0) {
       return {
@@ -386,7 +458,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, [player]);
 
-  const value = { player, setPlayer, isLoadingPlayer, leaderboard, isLoadingLeaderboard, updateScore, currentPage, setCurrentPage, toasts, addToast, removeToast, addAttempt, getPlayerStats, unlockAchievement };
+  const value = { player, setPlayer, isLoadingPlayer, leaderboard, isLoadingLeaderboard, updateScore, currentPage, setCurrentPage, toasts, addToast, removeToast, addAttempt, submitGameResult, getPlayerStats, unlockAchievement };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
     };
