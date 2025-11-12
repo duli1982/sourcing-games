@@ -10,7 +10,7 @@ const NameModal: React.FC = () => {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
-  const { setPlayer, addToast } = useAppContext();
+  const { setPlayer, loginPlayer, addToast } = useAppContext();
 
   const checkAvailability = async (candidate: string) => {
     if (!candidate.trim()) {
@@ -68,8 +68,8 @@ const NameModal: React.FC = () => {
         return;
       }
 
-      // Load the existing player
-      await setPlayer(existingPlayer);
+      // Use loginPlayer which just loads the player without updating the database
+      loginPlayer(existingPlayer);
       addToast(`Welcome back, ${existingPlayer.name}!`, 'success');
     } catch (error) {
       console.error('Failed to log in:', error);

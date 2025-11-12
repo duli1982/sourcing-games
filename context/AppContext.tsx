@@ -7,6 +7,7 @@ import { checkNewAchievements } from '../data/achievements';
 interface AppContextType {
   player: Player | null;
   setPlayer: (player: Player) => Promise<void>;
+  loginPlayer: (player: Player) => void;
   isLoadingPlayer: boolean;
   leaderboard: Player[];
   isLoadingLeaderboard: boolean;
@@ -217,7 +218,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       throw error; // Re-throw so NameModal can handle it
     }
   }, []);
-  
+
+  // Login existing player: Just load player data without database update
+  const loginPlayer = useCallback((player: Player) => {
+    if (!player.id) {
+      console.error('Cannot login player without ID');
+      addToast('Invalid player data. Please try again.', 'error');
+      return;
+    }
+
+    // Set player in state
+    setPlayerState(player);
+
+    // Save to localStorage for session persistence
+    window.localStorage.setItem('playerId', player.id);
+    window.localStorage.setItem('player', JSON.stringify(player));
+
+    // Update leaderboard with this player
+    setLeaderboard(prev => {
+      const existingIndex = prev.findIndex(p => p.id === player.id);
+      if (existingIndex >= 0) {
+        // Update existing entry in leaderboard
+        const updated = [...prev];
+        updated[existingIndex] = player;
+        return updated.sort((a, b) => b.score - a.score);
+      } else {
+        // Add to leaderboard if not present
+        return [...prev, player].sort((a, b) => b.score - a.score);
+      }
+    });
+  }, []);
+
   // Async updateScore: Optimistic update with rollback on failure
   const updateScore = useCallback(async (gameScore: number) => {
     if (!player || !player.id) {
@@ -416,7 +447,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, [player]);
 
-  const value = { player, setPlayer, isLoadingPlayer, leaderboard, isLoadingLeaderboard, updateScore, currentPage, setCurrentPage, toasts, addToast, removeToast, addAttempt, getPlayerStats, unlockAchievement };
+  const value = { player, setPlayer, loginPlayer, isLoadingPlayer, leaderboard, isLoadingLeaderboard, updateScore, currentPage, setCurrentPage, toasts, addToast, removeToast, addAttempt, getPlayerStats, unlockAchievement };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
     };
