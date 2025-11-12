@@ -17,9 +17,31 @@ const App: React.FC = () => {
   const { player, isLoadingPlayer, currentPage, setCurrentPage, toasts } = useAppContext();
   const [showTutorial, setShowTutorial] = useState(false);
 
-  // Check if user has completed tutorial
+  // Debug: Log player state to help troubleshoot
   useEffect(() => {
     if (player) {
+      console.log('[App] Player loaded:', {
+        name: player.name,
+        hasId: !!player.id,
+        id: player.id,
+        score: player.score
+      });
+
+      // If player has no ID, clear invalid data
+      if (!player.id) {
+        console.error('[App] Player has no ID! Clearing invalid data...');
+        localStorage.removeItem('player');
+        localStorage.removeItem('playerId');
+        window.location.reload();
+      }
+    } else {
+      console.log('[App] No player loaded');
+    }
+  }, [player]);
+
+  // Check if user has completed tutorial
+  useEffect(() => {
+    if (player && player.id) {
       const tutorialCompleted = localStorage.getItem(TUTORIAL_COMPLETED_KEY);
       if (!tutorialCompleted) {
         setShowTutorial(true);
@@ -52,7 +74,9 @@ const App: React.FC = () => {
     );
   }
 
-  if (!player) {
+  // CRITICAL: Check if player has a valid ID before showing main app
+  // If player exists but has no ID, show NameModal to force re-login
+  if (!player || !player.id) {
     return <NameModal />;
   }
 
