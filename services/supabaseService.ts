@@ -141,6 +141,45 @@ export const fetchPlayerById = async (id: string): Promise<Player | null> => {
 };
 
 /**
+ * Fetch player by name (for login/account recovery)
+ * Returns player with attempts and achievements from progress JSONB field
+ * Uses case-insensitive name matching
+ */
+export const fetchPlayerByName = async (name: string): Promise<Player | null> => {
+  if (!ensureConfig() || !supabaseClient) {
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('players')
+      .select('*')
+      .ilike('name', name)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Not found
+        return null;
+      }
+      console.error('Failed to fetch player by name:', error);
+      return null;
+    }
+
+    return {
+      id: data.id,
+      name: data.name,
+      score: data.score ?? 0,
+      attempts: data.progress?.attempts || [],
+      achievements: data.progress?.achievements || []
+    };
+  } catch (error) {
+    console.error('Error fetching player by name:', error);
+    return null;
+  }
+};
+
+/**
  * Create new player in Supabase
  * Returns player with DB-generated UUID
  */

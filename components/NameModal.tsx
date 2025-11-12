@@ -9,12 +9,14 @@ const NameModal: React.FC = () => {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const { setPlayer, addToast } = useAppContext();
 
   const checkAvailability = async (candidate: string) => {
     if (!candidate.trim()) {
       setAvailable(null);
       setValidationError(null);
+      setShowLoginPrompt(false);
       return;
     }
 
@@ -23,6 +25,7 @@ const NameModal: React.FC = () => {
     if (!validation.isValid) {
       setValidationError(validation.error || 'Invalid name');
       setAvailable(null);
+      setShowLoginPrompt(false);
       return;
     }
 
@@ -34,8 +37,10 @@ const NameModal: React.FC = () => {
     try {
       const taken = await (await import('../services/supabaseService')).isNameTaken(candidate.trim());
       setAvailable(!taken);
+      setShowLoginPrompt(taken); // Show login prompt if name is taken
     } catch {
       setAvailable(null);
+      setShowLoginPrompt(false);
     } finally {
       setChecking(false);
     }
@@ -46,8 +51,32 @@ const NameModal: React.FC = () => {
     setName(v);
     setAvailable(null); // Reset availability when typing
     setValidationError(null); // Reset validation error when typing
+    setShowLoginPrompt(false); // Reset login prompt when typing
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = window.setTimeout(() => checkAvailability(v), 350);
+  };
+
+  const handleLogin = async () => {
+    const trimmedName = name.trim();
+    setIsCreating(true);
+    try {
+      const { fetchPlayerByName } = await import('../services/supabaseService');
+      const existingPlayer = await fetchPlayerByName(trimmedName);
+
+      if (!existingPlayer) {
+        addToast('Account not found. Please try again.', 'error');
+        return;
+      }
+
+      // Load the existing player
+      await setPlayer(existingPlayer);
+      addToast(`Welcome back, ${existingPlayer.name}!`, 'success');
+    } catch (error) {
+      console.error('Failed to log in:', error);
+      addToast('Failed to log in. Please try again.', 'error');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -67,12 +96,6 @@ const NameModal: React.FC = () => {
       return;
     }
 
-    // Check if name is already taken
-    if (available === false) {
-      addToast('This name is already taken (case-insensitive). Please choose another.', 'error');
-      return;
-    }
-
     // Check if availability check is still in progress
     if (checking) {
       addToast('Please wait while we check name availability', 'error');
@@ -85,7 +108,13 @@ const NameModal: React.FC = () => {
       return;
     }
 
-    // Create player in Supabase
+    // If name is taken, user should use login button instead
+    if (available === false) {
+      addToast('This name is already registered. Please click "Log In" to access your account.', 'error');
+      return;
+    }
+
+    // Create new player in Supabase
     setIsCreating(true);
     try {
       await setPlayer({ name: trimmedName, score: 0, attempts: [] });
@@ -139,13 +168,49 @@ const NameModal: React.FC = () => {
           {!validationError && name.length === 0 && (
             <p className="text-gray-400 text-xs mt-2">💡 Use only letters, spaces, hyphens, and apostrophes (2-50 characters)</p>
           )}
-          <button
-            type="submit"
-            disabled={available === false || checking || validationError !== null || available === null || isCreating}
-            className="w-full mt-4 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed"
-          >
-            {isCreating ? 'Creating Account...' : 'Start Sourcing!'}
-          </button>
+          {!validationError && showLoginPrompt && (
+            <div className="mt-3 p-3 bg-cyan-900 bg-opacity-30 border border-cyan-600 rounded-md">
+              <p className="text-cyan-200 text-sm mb-2">
+                <strong>Account found!</strong> This name is already registered.
+              </p>
+              <p className="text-cyan-300 text-xs">
+                Is this your account? Click "Log In" to access it, or enter a different name to create a new account.
+              </p>
+            </div>
+          )}
+
+          {/* Show Login button if name is taken, otherwise show Create Account button */}
+          {showLoginPrompt ? (
+            <div className="flex gap-3 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setName('');
+                  setAvailable(null);
+                  setShowLoginPrompt(false);
+                }}
+                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300"
+              >
+                Choose Different Name
+              </button>
+              <button
+                type="button"
+                onClick={handleLogin}
+                disabled={isCreating}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed"
+              >
+                {isCreating ? 'Logging In...' : '🔑 Log In'}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="submit"
+              disabled={checking || validationError !== null || available === null || available === false || isCreating}
+              className="w-full mt-4 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed"
+            >
+              {isCreating ? 'Creating Account...' : '🚀 Start Sourcing!'}
+            </button>
+          )}
         </form>
       </div>
     </div>
