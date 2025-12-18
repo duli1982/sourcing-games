@@ -34,7 +34,7 @@ const PlayerProfilePage: React.FC = () => {
         setError(null);
 
         // Fetch from API
-        const response = await fetch(`/api/player/${encodeURIComponent(playerName)}`);
+        const response = await fetch(`/api/player?name=${encodeURIComponent(playerName)}`);
 
         if (!response.ok) {
           if (response.status === 404) {

@@ -36,7 +36,7 @@ const AdminPage: React.FC = () => {
     }
 
     try {
-      const response = await fetch('/api/admin/login', {
+      const response = await fetch('/api/admin/auth?action=login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -62,7 +62,7 @@ const AdminPage: React.FC = () => {
    */
   const handleLogout = async () => {
     try {
-      await fetch('/api/admin/logout', {
+      await fetch('/api/admin/auth?action=logout', {
         method: 'POST',
         credentials: 'include',
       });

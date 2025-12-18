@@ -49,7 +49,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             try {
                 // Security: Fetch player using httpOnly cookie (sent automatically)
                 // No localStorage access for session token - prevents XSS attacks
-                const response = await fetch('/api/player/me', {
+                const response = await fetch('/api/player?action=me', {
                     method: 'GET',
                     credentials: 'include', // Send httpOnly cookie
                 });

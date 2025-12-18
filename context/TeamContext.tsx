@@ -47,7 +47,7 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
     setError(null);
 
     try {
-      const response = await fetch('/api/teams/create', {
+      const response = await fetch('/api/teams?action=create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,7 +84,7 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
     setError(null);
 
     try {
-      const response = await fetch('/api/teams/join', {
+      const response = await fetch('/api/teams?action=join', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -121,7 +121,7 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
     setError(null);
 
     try {
-      const response = await fetch('/api/teams/leave', {
+      const response = await fetch('/api/teams?action=leave', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -158,7 +158,7 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
     setError(null);
 
     try {
-      const response = await fetch('/api/teams/my-teams');
+      const response = await fetch('/api/teams?action=my-teams&playerId=' + player.id);
 
       if (!response.ok) {
         throw new Error('Failed to fetch user teams');
@@ -187,7 +187,7 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
     setError(null);
 
     try {
-      const response = await fetch(`/api/teams/${teamId}`);
+      const response = await fetch(`/api/teams?action=details&teamId=${teamId}`);
 
       if (!response.ok) {
         const errorData = await response.json();

@@ -29,7 +29,7 @@ const TeamsPage: React.FC = () => {
     const fetchLeaderboard = async () => {
       setIsLoadingLeaderboard(true);
       try {
-        const response = await fetch('/api/teams/leaderboard');
+        const response = await fetch('/api/teams?action=leaderboard&limit=50');
         if (response.ok) {
           const data = await response.json();
           setLeaderboard(data);
