@@ -8,7 +8,9 @@
       "Bash(git pull:*)",
       "Bash(git fetch:*)",
       "Bash(git remote:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(git branch:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

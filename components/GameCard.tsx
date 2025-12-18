@@ -156,8 +156,9 @@ const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
             const response = await fetch('/api/submitAttempt', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include', // Send httpOnly cookie with session token
                 body: JSON.stringify({
-                    sessionToken: player.sessionToken,
+                    // Security: sessionToken now sent via httpOnly cookie, not request body
                     gameId: game.id,
                     skillLevel,
                     submission: trimmedSubmission,

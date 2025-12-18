@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useLeaderboardContext } from '../context/LeaderboardContext';
 import { usePlayerContext } from '../context/PlayerContext';
 import { Spinner } from '../components/Spinner';
@@ -103,7 +104,15 @@ const LeaderboardPage: React.FC = () => {
                                     return (
                                         <tr key={index} className={`${isCurrentUser ? 'bg-cyan-900/50 font-bold' : 'border-b border-gray-700 hover:bg-gray-700/50'}`}>
                                             <td className="p-3">{index + 1}</td>
-                                            <td className="p-3">{p.name} {isCurrentUser ? '(You)' : ''}</td>
+                                            <td className="p-3">
+                                                <Link
+                                                    to={`/player/${encodeURIComponent(p.name)}`}
+                                                    className="text-cyan-400 hover:text-cyan-300 hover:underline transition-colors"
+                                                >
+                                                    {p.name}
+                                                </Link>
+                                                {isCurrentUser ? ' (You)' : ''}
+                                            </td>
                                             <td className="p-3">{p.score}</td>
                                         </tr>
                                     );

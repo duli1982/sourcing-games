@@ -8,15 +8,16 @@ import { AdminAnalytics, AdminPlayer, AdminAttempt, GameOverride } from '../type
 
 const AdminPage: React.FC = () => {
   const { addToast } = useUIContext();
-  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('admin_token') || '');
-  const [adminActor, setAdminActor] = useState(() => localStorage.getItem('admin_actor') || 'admin');
+  // Security: Admin auth now uses httpOnly cookies, not localStorage
+  const [adminToken, setAdminToken] = useState(''); // For login form input only
+  const [adminActor, setAdminActor] = useState('admin'); // For login form input only
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
   const [players, setPlayers] = useState<AdminPlayer[]>([]);
   const [attempts, setAttempts] = useState<AdminAttempt[]>([]);
   const [gameOverrides, setGameOverrides] = useState<GameOverride[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'players' | 'attempts' | 'games'>('overview');
-  const isAuthorized = Boolean(adminToken);
 
   // New feature states
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
@@ -24,34 +25,79 @@ const AdminPage: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<AdminPlayer | null>(null);
 
-  const authHeaders = useMemo(
-    () => ({ 'x-admin-token': adminToken, 'x-admin-actor': adminActor, 'Content-Type': 'application/json' }),
-    [adminToken, adminActor]
-  );
-
-  const requireToken = (): boolean => {
+  /**
+   * Security: Login using httpOnly cookies instead of localStorage
+   * Admin credentials are never stored client-side
+   */
+  const handleLogin = async () => {
     if (!adminToken) {
-      addToast('Set admin token first.', 'error');
-      return false;
+      addToast('Enter admin token', 'error');
+      return;
     }
-    localStorage.setItem('admin_token', adminToken);
-    localStorage.setItem('admin_actor', adminActor || 'admin');
-    return true;
+
+    try {
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ token: adminToken, actor: adminActor }),
+      });
+
+      if (response.ok) {
+        setIsAuthorized(true);
+        setAdminToken(''); // Clear form input
+        addToast('Admin login successful', 'success');
+        fetchAll(); // Load data after successful login
+      } else {
+        const error = await response.json();
+        addToast(error.error || 'Invalid admin credentials', 'error');
+      }
+    } catch (error) {
+      addToast('Login failed', 'error');
+    }
   };
 
+  /**
+   * Logout and clear httpOnly cookies
+   */
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      setIsAuthorized(false);
+      setAnalytics(null);
+      setPlayers([]);
+      setAttempts([]);
+      setGameOverrides([]);
+      addToast('Logged out', 'success');
+    } catch (error) {
+      addToast('Logout failed', 'error');
+    }
+  };
+
+  /**
+   * Security: All admin API calls now use httpOnly cookies
+   * Credentials sent automatically via cookies
+   */
   const fetchAll = async () => {
-    if (!requireToken()) return;
+    if (!isAuthorized) return;
     setIsLoading(true);
     try {
       const [analyticsRes, playersRes, attemptsRes, gamesRes] = await Promise.all([
-        fetch('/api/admin/analytics', { headers: authHeaders }),
-        fetch('/api/admin/players', { headers: authHeaders }),
-        fetch('/api/admin/attempts?limit=50', { headers: authHeaders }),
-        fetch('/api/admin/games', { headers: authHeaders }),
+        fetch('/api/admin/analytics', { credentials: 'include' }),
+        fetch('/api/admin/players', { credentials: 'include' }),
+        fetch('/api/admin/attempts?limit=50', { credentials: 'include' }),
+        fetch('/api/admin/games', { credentials: 'include' }),
       ]);
 
       if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
-      else addToast('Failed to load analytics', 'error');
+      else if (analyticsRes.status === 401) {
+        setIsAuthorized(false);
+        addToast('Session expired, please log in again', 'error');
+        return;
+      } else addToast('Failed to load analytics', 'error');
 
       if (playersRes.ok) {
         const body = await playersRes.json();
@@ -79,20 +125,39 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  // Check if already authenticated on mount (cookie may still be valid)
   useEffect(() => {
-    if (adminToken) {
-      fetchAll();
-    }
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/admin/analytics', { credentials: 'include' });
+        if (response.ok) {
+          setIsAuthorized(true);
+          fetchAll();
+        }
+      } catch (error) {
+        // Not authenticated, stay on login screen
+      }
+    };
+    checkAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAction = async (playerId: string, action: 'ban' | 'unban' | 'reset-score') => {
-    if (!requireToken()) return;
+    if (!isAuthorized) {
+      addToast('Please log in first', 'error');
+      return;
+    }
     const res = await fetch('/api/admin/playerAction', {
       method: 'POST',
-      headers: authHeaders,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // Send httpOnly cookie
       body: JSON.stringify({ playerId, action }),
     });
+    if (res.status === 401) {
+      setIsAuthorized(false);
+      addToast('Session expired, please log in again', 'error');
+      return;
+    }
     if (!res.ok) {
       addToast(`Failed to ${action}`, 'error');
       return;
@@ -102,12 +167,21 @@ const AdminPage: React.FC = () => {
   };
 
   const handleSaveOverride = async (override: GameOverride) => {
-    if (!requireToken()) return;
+    if (!isAuthorized) {
+      addToast('Please log in first', 'error');
+      return;
+    }
     const res = await fetch('/api/admin/games', {
       method: 'POST',
-      headers: authHeaders,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // Send httpOnly cookie
       body: JSON.stringify(override),
     });
+    if (res.status === 401) {
+      setIsAuthorized(false);
+      addToast('Session expired, please log in again', 'error');
+      return;
+    }
     if (res.ok) {
       addToast('Saved game override', 'success');
       fetchAll();
@@ -120,7 +194,7 @@ const AdminPage: React.FC = () => {
   // Auto-refresh effect
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (autoRefresh && adminToken) {
+    if (autoRefresh && isAuthorized) {
       interval = setInterval(() => {
         fetchAll();
       }, 30000); // 30 seconds
@@ -128,7 +202,7 @@ const AdminPage: React.FC = () => {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [autoRefresh, adminToken]);
+  }, [autoRefresh, isAuthorized]);
 
 
 
@@ -409,36 +483,61 @@ const AdminPage: React.FC = () => {
           <p className="text-gray-400 text-sm">Monitor players, games, and moderation.</p>
         </div>
         <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Admin name (for audit log)"
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
-            value={adminActor}
-            onChange={e => setAdminActor(e.target.value)}
-          />
-          <input
-            type="password"
-            placeholder="Admin token"
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
-            value={adminToken}
-            onChange={e => setAdminToken(e.target.value)}
-          />
-          <button className="px-3 py-2 bg-cyan-600 text-white rounded text-sm" onClick={fetchAll} disabled={isLoading}>
-            {isLoading ? 'Loading...' : 'Load'}
-          </button>
-          <button
-            className="px-3 py-2 bg-gray-700 text-white rounded text-sm"
-            onClick={() => {
-              setAdminToken('');
-              setAdminActor('admin');
-              localStorage.removeItem('admin_token');
-              localStorage.removeItem('admin_actor');
-              addToast('Admin token cleared', 'info');
-              window.location.reload();
-            }}
-          >
-            Logout
-          </button>
+          {!isAuthorized ? (
+            <>
+              {/* Security: Login form - credentials sent via httpOnly cookie */}
+              <input
+                type="text"
+                placeholder="Admin name (for audit log)"
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
+                value={adminActor}
+                onChange={e => setAdminActor(e.target.value)}
+              />
+              <input
+                type="password"
+                placeholder="Admin token"
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
+                value={adminToken}
+                onChange={e => setAdminToken(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleLogin()}
+              />
+              <button
+                className="px-3 py-2 bg-cyan-600 text-white rounded text-sm"
+                onClick={handleLogin}
+                disabled={isLoading}
+              >
+                Login
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Authenticated - show refresh and logout */}
+              <span className="text-sm text-gray-400">
+                Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : 'Never'}
+              </span>
+              <label className="flex items-center gap-1 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={autoRefresh}
+                  onChange={e => setAutoRefresh(e.target.checked)}
+                />
+                Auto-refresh (30s)
+              </label>
+              <button
+                className="px-3 py-2 bg-cyan-600 text-white rounded text-sm"
+                onClick={fetchAll}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Loading...' : 'Refresh'}
+              </button>
+              <button
+                className="px-3 py-2 bg-gray-700 text-white rounded text-sm"
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </>
+          )}
         </div>
       </div>
 

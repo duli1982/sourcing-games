@@ -1,14 +1,28 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { usePlayerContext } from '../context/PlayerContext';
 import AchievementsPanel from '../components/AchievementsPanel';
+import ProfileSettings from '../components/ProfileSettings';
+import ProgressChart from '../components/ProgressChart';
+import SkillRadar from '../components/SkillRadar';
+import ScoreDistribution from '../components/ScoreDistribution';
 import { formatFeedback } from '../utils/feedbackFormatter';
+import {
+    calculateProgressOverTime,
+    calculateSkillBreakdown,
+    compareWithAverage,
+    identifyWeakSpots,
+    calculateStreak,
+    TimeFilterType,
+} from '../utils/analyticsUtils';
+import { games } from '../data/games';
 import '../styles/feedback.css';
 
 const ProfilePage: React.FC = () => {
     const { player, getPlayerStats } = usePlayerContext();
     const [showHistory, setShowHistory] = useState(false);
     const [expandedFeedback, setExpandedFeedback] = useState<number | null>(null);
+    const [timeFilter, setTimeFilter] = useState<TimeFilterType>('all');
 
     if (!player) {
         return (
@@ -20,6 +34,36 @@ const ProfilePage: React.FC = () => {
 
     const stats = getPlayerStats();
     const recentAttempts = player.attempts?.slice(0, 10) || [];
+
+    // Calculate analytics data with memoization for performance
+    const progressData = useMemo(
+        () => calculateProgressOverTime(player, timeFilter),
+        [player, timeFilter]
+    );
+
+    const skillBreakdown = useMemo(
+        () => calculateSkillBreakdown(player, timeFilter),
+        [player, timeFilter]
+    );
+
+    const scoreComparison = useMemo(
+        () => compareWithAverage(player, 65, timeFilter),
+        [player, timeFilter]
+    );
+
+    const weakSpots = useMemo(() => {
+        const gamesData = games.map((g) => ({
+            id: g.id,
+            title: g.title,
+            skillCategory: g.skillCategory,
+        }));
+        return identifyWeakSpots(player, gamesData, 70);
+    }, [player]);
+
+    const streakData = useMemo(() => calculateStreak(player), [player]);
+
+    // Tab state for analytics sections
+    const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview');
 
     return (
         <div>
@@ -60,9 +104,185 @@ const ProfilePage: React.FC = () => {
                 <AchievementsPanel player={player} />
             </div>
 
-            {/* Game Breakdown */}
-            {stats.gameBreakdown.length > 0 && (
-                <div className="bg-gray-800 rounded-lg p-8 shadow-xl mb-6">
+            {/* Profile Settings */}
+            <div className="mb-6">
+                <ProfileSettings />
+            </div>
+
+            {/* Tab Navigation */}
+            <div className="flex gap-4 mb-6">
+                <button
+                    onClick={() => setActiveTab('overview')}
+                    className={`px-6 py-3 rounded-lg font-semibold transition ${
+                        activeTab === 'overview'
+                            ? 'bg-cyan-500 text-white'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                >
+                    Overview
+                </button>
+                <button
+                    onClick={() => setActiveTab('analytics')}
+                    className={`px-6 py-3 rounded-lg font-semibold transition ${
+                        activeTab === 'analytics'
+                            ? 'bg-cyan-500 text-white'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                >
+                    Analytics Dashboard
+                </button>
+            </div>
+
+            {/* Analytics Dashboard */}
+            {activeTab === 'analytics' && (
+                <div className="space-y-6 mb-6">
+                    {/* Time Filter */}
+                    <div className="bg-gray-800 rounded-lg p-4 shadow-xl">
+                        <div className="flex items-center justify-between flex-wrap gap-4">
+                            <h3 className="text-xl font-bold text-cyan-400">Performance Analytics</h3>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setTimeFilter('7d')}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                                        timeFilter === '7d'
+                                            ? 'bg-cyan-500 text-white'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                    }`}
+                                >
+                                    Last 7 Days
+                                </button>
+                                <button
+                                    onClick={() => setTimeFilter('30d')}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                                        timeFilter === '30d'
+                                            ? 'bg-cyan-500 text-white'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                    }`}
+                                >
+                                    Last 30 Days
+                                </button>
+                                <button
+                                    onClick={() => setTimeFilter('all')}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                                        timeFilter === 'all'
+                                            ? 'bg-cyan-500 text-white'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                    }`}
+                                >
+                                    All Time
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Streak Card */}
+                    {streakData.currentStreak > 0 && (
+                        <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
+                            <h3 className="text-xl font-bold text-cyan-400 mb-4">🔥 Your Streak</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-gray-700 rounded-lg p-4 text-center">
+                                    <p className="text-gray-400 text-sm mb-1">Current Streak</p>
+                                    <p className="text-3xl font-bold text-orange-400">
+                                        {streakData.currentStreak} {streakData.currentStreak === 1 ? 'day' : 'days'}
+                                    </p>
+                                </div>
+                                <div className="bg-gray-700 rounded-lg p-4 text-center">
+                                    <p className="text-gray-400 text-sm mb-1">Longest Streak</p>
+                                    <p className="text-3xl font-bold text-yellow-400">
+                                        {streakData.longestStreak} {streakData.longestStreak === 1 ? 'day' : 'days'}
+                                    </p>
+                                </div>
+                                <div className="bg-gray-700 rounded-lg p-4 text-center">
+                                    <p className="text-gray-400 text-sm mb-1">Last Played</p>
+                                    <p className="text-lg font-bold text-green-400">
+                                        {streakData.lastPlayedDate
+                                            ? new Date(streakData.lastPlayedDate).toLocaleDateString()
+                                            : 'Never'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Score Progression Chart */}
+                    <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
+                        <h3 className="text-xl font-bold text-cyan-400 mb-4">Score Progression Over Time</h3>
+                        <ProgressChart data={progressData} />
+                    </div>
+
+                    {/* Skill Proficiency Radar */}
+                    <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
+                        <h3 className="text-xl font-bold text-cyan-400 mb-4">Skill Proficiency Breakdown</h3>
+                        <SkillRadar data={skillBreakdown} />
+                    </div>
+
+                    {/* Score Distribution Comparison */}
+                    <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
+                        <h3 className="text-xl font-bold text-cyan-400 mb-4">Score Distribution vs Community</h3>
+                        <ScoreDistribution data={scoreComparison} />
+                    </div>
+
+                    {/* Weak Spots & Recommendations */}
+                    {weakSpots.length > 0 && (
+                        <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
+                            <h3 className="text-xl font-bold text-cyan-400 mb-4">🎯 Areas for Improvement</h3>
+                            <p className="text-gray-400 text-sm mb-4">
+                                Focus on these skills to boost your overall score. Practice makes perfect!
+                            </p>
+                            <div className="space-y-4">
+                                {weakSpots.map((spot) => (
+                                    <div key={spot.skillKey} className="bg-gray-700 rounded-lg p-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div>
+                                                <h4 className="text-white font-bold">{spot.skill}</h4>
+                                                <p className="text-sm text-gray-400">
+                                                    Average: {spot.avgScore}/100 • {spot.attempts} attempt
+                                                    {spot.attempts !== 1 ? 's' : ''}
+                                                </p>
+                                            </div>
+                                            <div
+                                                className={`text-2xl font-bold ${
+                                                    spot.avgScore < 50
+                                                        ? 'text-red-400'
+                                                        : spot.avgScore < 70
+                                                        ? 'text-yellow-400'
+                                                        : 'text-cyan-400'
+                                                }`}
+                                            >
+                                                {spot.avgScore}
+                                            </div>
+                                        </div>
+                                        {spot.recommendedGames.length > 0 && (
+                                            <div className="mt-3 pt-3 border-t border-gray-600">
+                                                <p className="text-xs text-gray-400 mb-2">
+                                                    💡 Recommended Games:
+                                                </p>
+                                                <ul className="space-y-1">
+                                                    {spot.recommendedGames.map((gameTitle, idx) => (
+                                                        <li
+                                                            key={idx}
+                                                            className="text-sm text-cyan-400 hover:text-cyan-300 cursor-pointer transition"
+                                                        >
+                                                            • {gameTitle}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Overview Tab Content */}
+            {activeTab === 'overview' && (
+                <>
+                    {/* Game Breakdown */}
+                    {stats.gameBreakdown.length > 0 && (
+                        <div className="bg-gray-800 rounded-lg p-8 shadow-xl mb-6">
                     <h3 className="text-xl font-bold text-cyan-400 mb-4">Performance by Game</h3>
                     <div className="space-y-4">
                         {stats.gameBreakdown.map((gameStats) => (
@@ -157,12 +377,14 @@ const ProfilePage: React.FC = () => {
                 </div>
             )}
 
-            {/* Empty State */}
-            {stats.totalGamesPlayed === 0 && (
-                <div className="bg-gray-800 rounded-lg p-12 shadow-xl text-center">
-                    <p className="text-gray-400 text-lg mb-4">You haven't played any games yet!</p>
-                    <p className="text-gray-500">Head over to the Games page to get started and start building your profile.</p>
-                </div>
+                    {/* Empty State */}
+                    {stats.totalGamesPlayed === 0 && (
+                        <div className="bg-gray-800 rounded-lg p-12 shadow-xl text-center">
+                            <p className="text-gray-400 text-lg mb-4">You haven't played any games yet!</p>
+                            <p className="text-gray-500">Head over to the Games page to get started and start building your profile.</p>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );

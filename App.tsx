@@ -9,6 +9,7 @@ import HomePage from './pages/HomePage';
 import GamesPage from './pages/GamesPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import ProfilePage from './pages/ProfilePage';
+import TeamsPage from './pages/TeamsPage';
 import AdminPage from './pages/AdminPage';
 import Toast from './components/Toast';
 import { Page } from './types';
@@ -92,6 +93,7 @@ const App: React.FC = () => {
           <div className={`page ${currentPage === 'home' ? 'active' : ''}`}><HomePage /></div>
           <div className={`page ${currentPage === 'games' ? 'active' : ''}`}><GamesPage /></div>
           <div className={`page ${currentPage === 'leaderboard' ? 'active' : ''}`}><LeaderboardPage /></div>
+          <div className={`page ${currentPage === 'teams' ? 'active' : ''}`}><TeamsPage /></div>
           <div className={`page ${currentPage === 'profile' ? 'active' : ''}`}><ProfilePage /></div>
           <div className={`page ${currentPage === 'admin' ? 'active' : ''}`}><AdminPage /></div>
         </div>

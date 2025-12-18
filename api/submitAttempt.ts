@@ -5,6 +5,7 @@ import { games } from './_lib/data/games.js';
 import { Attempt, Player } from '../types.js';
 import { checkNewAchievements } from './_lib/data/achievements.js';
 import { rubricByDifficulty } from '../utils/rubrics.js';
+import { getSessionTokenFromCookie } from './_lib/utils/cookieUtils.js';
 
 const GEMINI_MAX_OUTPUT_TOKENS = 120;
 const GEMINI_PROMPT_CHAR_LIMIT = 2800;
@@ -145,8 +146,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { sessionToken, gameId, submission, validation, skillLevel } = (req.body ?? {}) as {
-      sessionToken?: string;
+    // Security: Read session token from httpOnly cookie instead of request body
+    const sessionToken = getSessionTokenFromCookie(req);
+
+    const { gameId, submission, validation, skillLevel } = (req.body ?? {}) as {
       gameId?: string;
       submission?: string;
       validation?: any; // ValidationResult

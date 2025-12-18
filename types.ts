@@ -10,9 +10,33 @@ export interface Player {
   attempts?: Attempt[]; // Player's game attempts history
   achievements?: Achievement[]; // Unlocked achievements
   pinHash?: string; // Secure PIN hash for account recovery
+  // Profile fields
+  bio?: string;
+  avatarUrl?: string;
+  profileVisibility?: 'public' | 'private' | 'friends';
+  socialLinks?: {
+    linkedin?: string;
+    twitter?: string;
+  };
+  createdAt?: string; // ISO timestamp
 }
 
-export type Page = 'home' | 'games' | 'leaderboard' | 'profile' | 'admin';
+// Public profile data (excludes sensitive fields)
+export interface PublicPlayer {
+  name: string;
+  score: number;
+  bio?: string;
+  avatarUrl?: string;
+  socialLinks?: {
+    linkedin?: string;
+    twitter?: string;
+  };
+  achievements: Achievement[];
+  stats: PlayerStats;
+  createdAt: string;
+}
+
+export type Page = 'home' | 'games' | 'leaderboard' | 'profile' | 'teams' | 'admin';
 
 export interface ChatMessage {
   sender: 'user' | 'coach';
@@ -178,3 +202,45 @@ export type GameOverride = {
   featured?: boolean;
   active?: boolean;
 };
+
+// Team Competition Types
+export interface Team {
+  id: string;
+  name: string;
+  description?: string;
+  inviteCode: string;
+  logoUrl?: string;
+  createdBy: string; // Player name
+  createdAt: string;
+  updatedAt: string;
+  memberCount: number;
+  maxMembers: number;
+  isActive: boolean;
+  // Computed fields (not in DB)
+  averageScore?: number;
+  members?: TeamMember[];
+}
+
+export interface TeamMember {
+  id: string;
+  teamId: string;
+  playerId: string;
+  playerName: string;
+  role: 'owner' | 'admin' | 'member';
+  joinedAt: string;
+  // Computed fields
+  score?: number;
+}
+
+export interface TeamLeaderboardEntry {
+  team: Team;
+  averageScore: number;
+  totalMembers: number;
+  rank: number;
+}
+
+export interface CreateTeamData {
+  name: string;
+  description?: string;
+  logoUrl?: string;
+}

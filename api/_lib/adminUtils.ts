@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { parseCookies } from './utils/cookieUtils.js';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -12,17 +13,28 @@ export const getAdminSupabase = () => {
   return createClient(supabaseUrl, supabaseServiceRoleKey);
 };
 
-export const getAdminActor = (req: VercelRequest): string =>
-  (req.headers['x-admin-actor'] as string) ||
-  (req.headers['x-admin-user'] as string) ||
-  'admin';
+/**
+ * Security: Read admin actor from httpOnly cookie instead of headers
+ */
+export const getAdminActor = (req: VercelRequest): string => {
+  const cookies = parseCookies(req);
+  return cookies.adminActor || 'admin';
+};
 
+/**
+ * Security: Validate admin access using httpOnly cookie instead of headers
+ * This prevents admin token theft via XSS attacks
+ */
 export const assertAdmin = (req: VercelRequest, res: VercelResponse): boolean => {
   if (!adminToken) {
     res.status(500).json({ error: { code: 'admin_token_missing', message: 'Admin token is not configured on the server.' } });
     return false;
   }
-  const token = (req.headers['x-admin-token'] || req.headers['authorization'] || '').toString().replace('Bearer ', '');
+
+  // Read admin token from httpOnly cookie
+  const cookies = parseCookies(req);
+  const token = cookies.adminToken;
+
   if (!token || token !== adminToken) {
     res.status(401).json({ error: { code: 'unauthorized', message: 'Admin access denied.' } });
     return false;

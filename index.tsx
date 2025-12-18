@@ -1,10 +1,11 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import RouterWrapper from './RouterWrapper';
 import { UIProvider } from './context/UIContext';
 import { LeaderboardProvider } from './context/LeaderboardContext';
 import { PlayerProvider } from './context/PlayerContext';
+import { TeamProvider } from './context/TeamContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -17,7 +18,9 @@ root.render(
     <UIProvider>
       <LeaderboardProvider>
         <PlayerProvider>
-          <App />
+          <TeamProvider>
+            <RouterWrapper />
+          </TeamProvider>
         </PlayerProvider>
       </LeaderboardProvider>
     </UIProvider>

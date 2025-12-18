@@ -15,5 +15,8 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   const secure = process.env.VERCEL_ENV === 'production' ? 'Secure; ' : '';
   res.setHeader('Set-Cookie', `sessionToken=${sessionToken}; Path=/; ${secure}HttpOnly; SameSite=Strict; Max-Age=${ONE_YEAR}`);
 
+  // Security: Return token ONLY for initial database storage
+  // Client should NEVER store this in localStorage - only pass to createPlayer
+  // All subsequent requests will use the httpOnly cookie
   return res.status(200).json({ sessionToken });
 }
