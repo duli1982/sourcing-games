@@ -616,6 +616,9 @@ export const games: Game[] = [
         skillCategory: 'xray' as const,
         exampleSolution: 'site:stackoverflow.com/users (Swift OR SwiftUI OR "Swift UI") AND (iOS OR iPhone) AND ("reputation" OR "top user" OR "answers") -site:stackoverflow.com/questions',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            keywords: ['Swift', 'iOS', 'stackoverflow'],
+        },
         promptGenerator: (submission, rubric) => `
             You are a Technical Sourcing Expert evaluating an X-ray search. A participant has written a Google X-ray search to find iOS developers on Stack Overflow.
 
@@ -668,6 +671,9 @@ export const games: Game[] = [
         skillCategory: 'outreach' as const,
         exampleSolution: 'Hi Jennifer, I wanted to follow up on my message from last week about the Senior Data Engineer role at DataCorp. I know you\'re likely busy, but wanted to make sure it didn\'t get lost in your inbox. If the timing isn\'t right or you\'re not interested, no worries at all—just let me know and I won\'t bother you again. Thanks!',
         rubric: rubricByDifficulty.easy,
+        validation: {
+            maxWords: 75,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Candidate Engagement Specialist evaluating a follow-up email. A participant has written a follow-up to a Senior Data Engineer who hasn't responded after 5 days.
 
@@ -720,6 +726,9 @@ export const games: Game[] = [
         skillCategory: 'xray' as const,
         exampleSolution: 'site:github.com (React OR ReactJS OR "front end" OR "frontend developer") AND (Austin OR "Austin, TX" OR Texas) AND ("repositories" OR "contributions") AND ("open source" OR "open-source") -site:github.com/topics -site:github.com/trending',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            keywords: ['React', 'Austin', 'github'],
+        },
         promptGenerator: (submission, rubric) => `
             You are a Technical Sourcer evaluating a GitHub X-ray search. A participant has written a Google X-ray search to find front-end developers on GitHub.
 
@@ -772,6 +781,11 @@ export const games: Game[] = [
         skillCategory: 'persona' as const,
         exampleSolution: 'A proven enterprise sales leader with 10-15 years of experience, including at least 5 years selling cybersecurity or infrastructure solutions to Fortune 500 companies. Likely has an MBA and has managed teams of 10-20 AEs/SEs, with a track record of consistently exceeding $10M+ quotas. Motivated by equity upside and the opportunity to build a sales organization from the ground up at a high-growth startup. Has probably worked at established cybersecurity vendors (Palo Alto Networks, CrowdStrike, Okta) and is ready to take on more strategic responsibility. May be active on LinkedIn sharing thought leadership about enterprise sales or cybersecurity trends. Can be found at RSA Conference, Black Hat, or through referrals from VPs at competitor companies.',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 80,
+            maxWords: 200,
+            minSentences: 5,
+        },
         promptGenerator: (submission, rubric) => `
             You are an Executive Search Researcher evaluating a candidate persona. A participant has created a detailed persona for a VP of Sales at a cybersecurity company.
 
@@ -824,6 +838,10 @@ export const games: Game[] = [
         skillCategory: 'job-description' as const,
         exampleSolution: '1) "Rockstar developer" - Use "experienced developer" or "skilled engineer" to avoid gendered/exclusionary jargon. 2) "Top-tier university" - This excludes candidates from non-traditional backgrounds; change to "relevant degree or equivalent experience." 3) "Young, hungry talent" - Age discrimination red flag; use "motivated professionals" or "passionate engineers." 4) "Work-hard-play-hard culture" - Can deter candidates with caregiving responsibilities; replace with "collaborative, results-driven environment with work-life balance."',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            minWords: 60,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a DE&I Consultant evaluating a job description review. A participant has identified problematic phrases in a biased job description and suggested inclusive alternatives.
 
@@ -876,6 +894,10 @@ export const games: Game[] = [
         skillCategory: 'linkedin' as const,
         exampleSolution: 'Current Title: (CTO OR "Chief Technology Officer" OR "VP Engineering" transitioning to CTO)\nKeywords: ("scaled team" OR "grew team" OR "10 to 100" OR "team growth" OR "built engineering team")\nCompany Type: Venture-backed startup OR funded startup\nCompany Size: 51-200, 201-500, 501-1000 (companies that have scaled)\nPast Company Keywords: (Series B OR Series C OR Series D OR growth stage OR scale-up)\nYears at Current Company: 2+ (looking for people who stayed through scaling phase)\nFunction: Engineering\nSeniority Level: CXO, VP',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 30,
+            minSentences: 2,
+        },
         promptGenerator: (submission, rubric) => `
             You are a LinkedIn Recruiter Power User evaluating filter selections. A participant has selected filters.
 
@@ -928,6 +950,10 @@ export const games: Game[] = [
         skillCategory: 'boolean' as const,
         exampleSolution: '("Registered Nurse" OR RN OR "Critical Care Nurse") AND (ICU OR "Intensive Care Unit" OR "Critical Care") AND (CCRN OR "CCRN certified" OR "Critical Care Registered Nurse") AND (Chicago OR "Chicago area" OR Illinois OR IL) AND ("travel nurse" OR "travel nursing" OR "open to relocation" OR "willing to travel")',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            keywords: ['Nurse', 'ICU', 'CCRN'],
+            location: 'Chicago',
+        },
         promptGenerator: (submission, rubric) => `
             You are a Healthcare Recruiter evaluating a Boolean search string submission. A participant has written a Boolean search.
 
@@ -979,6 +1005,10 @@ export const games: Game[] = [
         skillCategory: 'screening' as const,
         exampleSolution: 'The candidate has the right licenses (Series 7 and 63) and relevant compliance experience, but fintech and traditional banking compliance can differ significantly in regulatory scope. The 4 years of experience meets the minimum, but the lack of traditional banking or regulatory agency background is a gap. Recommend a phone screen to assess: 1) Their specific experience with banking regulations (BSA/AML, FDIC, OCC requirements), 2) Whether their fintech exposure included any banking partnerships or bank-like regulations, 3) Their understanding of the regulatory examination process. If they have strong transferable knowledge and are coachable, they could be a culture fit given fintech\'s innovative approach to compliance.',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            minWords: 50,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Financial Services Recruiter & Compliance Screener evaluating a candidate assessment. A participant has screened a candidate.
 
@@ -1030,6 +1060,10 @@ export const games: Game[] = [
         skillCategory: 'diversity' as const,
         exampleSolution: '1) Provide interview questions and format details in advance to reduce anxiety and allow preparation. 2) Offer alternative interview formats: written responses, take-home assignments, or skills-based assessments instead of only verbal interviews. 3) Create a sensory-friendly interview environment: quiet room, option to turn off cameras in virtual interviews, minimal distractions. 4) Allow extra time for processing questions and formulating responses; avoid rapid-fire questioning. 5) Focus on skills-based evaluation over culture fit, and train interviewers to recognize different communication styles. 6) Partner with neurodiversity employment organizations like Specialisterne or Integrate Autism Employment Advisors. 7) Provide clear, structured onboarding with written documentation.',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 60,
+            minSentences: 4,
+        },
         promptGenerator: (submission, rubric) => `
             You are an Inclusive Hiring Expert evaluating an accommodation design. A participant has designed accommodations.
 
@@ -1082,6 +1116,10 @@ export const games: Game[] = [
         skillCategory: 'ats' as const,
         exampleSolution: 'The bottleneck is at the top of the funnel - 120 candidates sitting in "New" status suggests inadequate screening capacity or unclear qualification criteria. The conversion rate from Phone Screen (45) to Onsite (20) is healthy at 44%, and Onsite to Offer (15 to 15) needs monitoring. Actions: 1) Implement knockout questions in the application to auto-screen unqualified candidates, reducing the "New" pile. 2) Schedule a calibration session with the hiring manager to tighten screening criteria and create a scorecard. 3) Dedicate 2 hours daily for the next week to batch-process "New" candidates - aim to clear 30-40 per day. 4) Set up automated rejection emails for clearly unqualified candidates to improve candidate experience. 5) Track time-in-stage metrics weekly to prevent future buildup. Goal: Get "New" down to <30 within one week.',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 60,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Recruiting Ops Analyst evaluating a pipeline bottleneck diagnosis. A participant has diagnosed a pipeline bottleneck.
 
@@ -1133,6 +1171,10 @@ export const games: Game[] = [
         skillCategory: 'diversity' as const,
         exampleSolution: 'Issue 1: "Rockstar" and "ninja" are tech-bro jargon that may discourage women and underrepresented groups from applying. Replace with "skilled engineer" or "experienced developer". Issue 2: "Recent grad" can be interpreted as age discrimination, potentially excluding career-changers and older candidates. Use "early career" or remove time-based language. Issue 3: "Top university" requirement creates socioeconomic and geographic bias, excluding talented developers from non-elite schools, bootcamps, or self-taught backgrounds. Change to "CS degree or equivalent experience". Issue 4: Sourcing only from MIT/Stanford/CMU perpetuates lack of diversity. Expand to HBCUs (Howard, Spelman), HSIs (UT Austin, UC System), regional state schools, and coding bootcamps (Hack Reactor, App Academy). Issue 5: Add diversity job boards (PowerToFly, Jopwell, Fairygodboss) and focus on skills-based assessments over pedigree.',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 80,
+            minSentences: 5,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Compliance & DE&I Talent Partner evaluating a bias identification in sourcing. A participant has identified bias in sourcing.
 
@@ -1184,6 +1226,9 @@ export const games: Game[] = [
         skillCategory: 'boolean' as const,
         exampleSolution: '("District Manager" OR "Regional Manager" OR "Area Manager" OR "Multi-Unit Manager") AND (retail OR "brick and mortar" OR stores) AND ("P&L" OR "profit and loss" OR "P&L responsibility" OR revenue) AND ("store performance" OR "sales improvement" OR "comp sales" OR "same-store sales") AND (Target OR Walmart OR "Best Buy" OR Nordstrom OR Macy\'s OR Gap OR "Home Depot" OR Lowe\'s OR CVS OR Walgreens)',
         rubric: rubricByDifficulty.easy,
+        validation: {
+            keywords: ['District Manager', 'retail', 'P&L'],
+        },
         promptGenerator: (submission, rubric) => `
             You are a Retail Recruiter evaluating a Boolean search string submission. A participant has written a Boolean search.
 
@@ -1235,6 +1280,10 @@ export const games: Game[] = [
         skillCategory: 'boolean' as const,
         exampleSolution: '("Manufacturing Engineer" OR "Process Engineer" OR "Production Engineer" OR "Industrial Engineer") AND ("Lean Six Sigma" OR "Six Sigma" OR "Green Belt" OR "Black Belt" OR LSS) AND (automotive OR aerospace OR aviation OR "auto industry") AND (CAD OR AutoCAD OR SolidWorks OR "3D modeling" OR "CAD software") AND (Detroit OR Michigan OR Seattle OR Washington OR "Puget Sound")',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            keywords: ['Manufacturing Engineer', 'Lean Six Sigma', 'CAD'],
+            location: 'Detroit|Seattle',
+        },
         promptGenerator: (submission, rubric) => `
             You are an Engineering Sourcer evaluating a Boolean search string submission. A participant has written a Boolean search.
 
@@ -1287,6 +1336,10 @@ export const games: Game[] = [
         skillCategory: 'linkedin' as const,
         exampleSolution: 'Current Title: ("Sales Director" OR "Director of Sales" OR "VP Sales" OR "Head of Sales")\nKeywords: (SaaS OR "Software as a Service" OR "B2B software") AND (enterprise OR "Fortune 500" OR "enterprise sales" OR "strategic accounts")\nCompany Revenue: $10M-$50M, $50M-$100M\nIndustry: Computer Software, Information Technology & Services, Internet\nYears in Current Position: 0-1 years, 1-2 years\nFunction: Sales\nSeniority Level: Director, VP\nBoolean in Keywords field: (enterprise OR "Fortune 500") AND (SaaS OR "B2B software")',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 40,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a SaaS Recruiter evaluating a LinkedIn Recruiter search. A participant has written a LinkedIn Recruiter search.
 
@@ -1339,6 +1392,10 @@ export const games: Game[] = [
         skillCategory: 'diversity' as const,
         exampleSolution: '1) Army Logistics Officers (88A/92A MOS) and Navy Supply Corps Officers have direct operational and supply chain experience. 2) Marine Corps Operations Officers and Air Force Mission Support Officers bring coordination and team leadership skills. 3) Senior NCOs (E-7 to E-9) across all branches with logistics or operations backgrounds. Sourcing approach: Partner with veteran organizations (Hire Heroes USA, Veterati, FourBlock), attend veteran job fairs, use LinkedIn\'s Military Occupational Specialty feature, search for keywords like "veteran", "transitioning service member", "military leadership", "clearance holder". Create veteran-friendly JDs that translate requirements (avoid corporate jargon, highlight leadership and problem-solving). Offer MOS-to-civilian role translation guides and mentorship programs for smooth transition.',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            minWords: 60,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Veteran Talent Acquisition Specialist evaluating a sourcing strategy. A participant has created a sourcing strategy.
 
@@ -1390,6 +1447,10 @@ export const games: Game[] = [
         skillCategory: 'ats' as const,
         exampleSolution: 'Step 1: Segment by role similarity - use ATS tags to match candidates to the 5 new openings by skills and level. Prioritize those who interviewed within the last 6 months (warmer leads). Step 2: Check candidate status - scrub LinkedIn to see who might have changed jobs (remove those recently promoted or moved). Step 3: Personalized outreach sequence - Email 1 (Day 0): "We\'re reaching out because we were impressed by you during your [role] interview. We have new opportunities that might be a better fit." Include specific role links. Email 2 (Day 5): Follow-up for non-responders with additional context about team/company updates. Step 4: Fast-track process - Offer expedited interviews (skip phone screen) since they\'re already vetted. Step 5: Track metrics - monitor response rate, conversion to interview, and time-to-hire vs. new candidates. Silver medalists should convert 20-30% to interviews.',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            minWords: 50,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Candidate Marketing Manager evaluating a re-engagement campaign design. A participant has designed a re-engagement campaign.
 
@@ -1441,6 +1502,10 @@ export const games: Game[] = [
         skillCategory: 'diversity' as const,
         exampleSolution: '1) Obtain explicit consent before adding candidates to your ATS - you cannot store personal data without their permission. Use LinkedIn InMail or email to request consent first. 2) Provide clear privacy notice - inform candidates how their data will be used, stored, and for how long (typically 6-12 months for recruiting purposes). 3) Right to erasure - candidates can request deletion of their data at any time. Build ATS workflows to honor these requests within 30 days. 4) Data minimization - only collect necessary information (no sensitive data like race, religion, health unless legally required for diversity monitoring with consent). 5) Lawful basis - ensure you have legitimate interest or consent for processing. Don\'t share candidate data with third parties without explicit consent. 6) Cross-border transfer - if transferring data from EU to US, ensure your company has Standard Contractual Clauses or Privacy Shield equivalent. 7) Document compliance - maintain records of consent and data processing activities.',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 70,
+            minSentences: 4,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Data Privacy Officer evaluating GDPR compliance steps. A participant has outlined GDPR steps.
 
@@ -1490,6 +1555,9 @@ export const games: Game[] = [
         placeholder: 'e.g., GitHub: site:github.com...',
         difficulty: 'hard' as const,
         skillCategory: 'xray' as const,
+        validation: {
+            keywords: ['Developer Advocate', 'backend'],
+        },
         exampleSolution: 'GitHub X-ray: site:github.com ("Developer Advocate" OR "DevRel" OR "Developer Relations") AND (speaker OR conference OR "open source" OR contributor) -site:github.com/topics\n\nTwitter/X X-ray: site:twitter.com ("Developer Advocate" OR "DevRel") AND (backend OR "backend developer" OR API) AND (speaking OR conference OR "just spoke")\n\nLinkedIn Boolean: ("Developer Advocate" OR "DevRel Engineer" OR "Developer Relations") AND (speaker OR "conference speaker" OR "technical blog" OR blogger) AND (backend OR "backend development" OR Python OR Node OR Go)\n\nDev.to X-ray: site:dev.to (author OR "@") AND ("Developer Advocate" OR DevRel) AND (backend OR API OR "backend development")\n\nMedium X-ray: site:medium.com ("Developer Advocate" OR DevRel) AND (backend OR API OR microservices) AND (@)\n\nConference sites: site:sessionize.com ("Developer Advocate" OR DevRel) AND (backend OR API)',
         rubric: rubricByDifficulty.hard,
         promptGenerator: (submission, rubric) => `
@@ -1543,6 +1611,10 @@ export const games: Game[] = [
         skillCategory: 'ai-prompting' as const,
         exampleSolution: 'Act as an expert technical sourcer. Write a Boolean search string for LinkedIn Recruiter to find Senior Site Reliability Engineers in London. Required skills: Terraform AND AWS. Exclude candidates currently working at consulting firms (like Accenture, Deloitte, KPMG, etc.). Please use standard Boolean operators (AND, OR, NOT) and group terms correctly with parentheses. Include common job title variations for SRE.',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            type: 'promptInstructions',
+            mustMention: ['Boolean', 'SRE'],
+        },
         promptGenerator: (submission, rubric) => `
             You are a Prompt Engineering Coach evaluating an AI prompt submission. A participant has written a prompt for AI.
 
@@ -1595,6 +1667,10 @@ export const games: Game[] = [
         skillCategory: 'ai-prompting' as const,
         exampleSolution: 'Act as a Senior Technical Recruiter. I will paste a resume below. Please extract the 3 most significant achievements related to "Cloud Migration" or "Digital Transformation". Format them as punchy bullet points that quantify the impact (cost savings, speed, scale). Ignore general responsibilities; focus on outcomes. Output ONLY the 3 bullets.',
         rubric: rubricByDifficulty.easy,
+        validation: {
+            type: 'promptInstructions',
+            mustMention: ['Cloud Migration', 'bullet'],
+        },
         promptGenerator: (submission, rubric) => `
             You are an AI Co-pilot Coach for Recruiters evaluating an AI prompt submission. A participant has used AI to summarize a resume.
 
@@ -1646,6 +1722,9 @@ export const games: Game[] = [
         skillCategory: 'outreach' as const,
         exampleSolution: 'Subject: Permission to close your file?\n\nHi Alex, I haven\'t heard back, so I assume you\'re not interested in the Head of Engineering role right now. I\'m going to close your file for this search so I don\'t keep bothering you. If things change, let me know. Best, [Name]',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            maxWords: 50,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Sales Psychology Expert evaluating a "break-up" email submission.
 
@@ -1697,6 +1776,10 @@ export const games: Game[] = [
         skillCategory: 'negotiation' as const,
         exampleSolution: 'I completely understand where you\'re coming from, and I appreciate you being open about your expectations. We arrived at $120k based on our internal equity and current market benchmarks for this specific level. However, I don\'t want money to be the only blocker if this is the right career move for you. Can we hop on a call to look at the total package (equity, benefits, bonus) and see if we can bridge the gap in other ways?',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 50,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Negotiation Coach evaluating a salary objection response.
 
@@ -1748,6 +1831,10 @@ export const games: Game[] = [
         skillCategory: 'ai-prompting' as const,
         exampleSolution: 'Create a structured interview guide for a Growth Marketing Manager. I need 5 behavioral questions focusing on "Experimentation" (A/B testing) and "Data Analysis". For each question, provide a "Good Answer" vs. "Bad Answer" rubric to help me evaluate candidates. Tone: Professional and rigorous.',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            type: 'promptInstructions',
+            mustMention: ['questions', 'rubric'],
+        },
         promptGenerator: (submission, rubric) => `
             You are an Interview Design Expert evaluating an AI prompt for interview question generation.
 
@@ -1799,6 +1886,9 @@ export const games: Game[] = [
         skillCategory: 'outreach' as const,
         exampleSolution: 'Hey [Name], I know your inbox is probably exploding with recruiter spam, so I wanted to send a voice note to show there\'s a real human behind this profile. I saw your work on the [Project Name] repo and was genuinely impressed by your approach to concurrency. We\'re building something similar at [Company] and I\'d love to just geek out about it for 5 mins. No pitch, just engineering talk. Let me know.',
         rubric: rubricByDifficulty.easy,
+        validation: {
+            maxWords: 100,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Personal Branding Expert evaluating a LinkedIn voice note script.
 
@@ -1850,6 +1940,10 @@ export const games: Game[] = [
         skillCategory: 'persona' as const,
         exampleSolution: 'Rewrite the following resume summary into a compelling, narrative-style executive bio suitable for presenting to a CEO. Highlight their leadership scale (team size), strategic impact (revenue growth), and technical vision. Tone: Impressive, confident, and executive. Keep it under 200 words.',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            type: 'promptInstructions',
+            mustMention: ['bio', 'executive'],
+        },
         promptGenerator: (submission, rubric) => `
             You are an Executive Search Researcher evaluating an AI prompt for executive bio generation.
 
@@ -1901,6 +1995,9 @@ export const games: Game[] = [
         skillCategory: 'xray' as const,
         exampleSolution: 'site:kaggle.com/ (users OR "competitions") ("Computer Vision" OR CV OR "Image Processing") AND ("Grandmaster" OR "Master" OR "Expert" OR ranking) -site:kaggle.com/c -site:kaggle.com/code',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            keywords: ['Kaggle', 'data'],
+        },
         promptGenerator: (submission, rubric) => `
             You are a Technical Sourcing Guru evaluating an X-Ray search string submission.
 
@@ -1952,6 +2049,9 @@ export const games: Game[] = [
         skillCategory: 'xray' as const,
         exampleSolution: 'site:dribbble.com (minimalist OR clean OR "minimalism") AND ("UI Designer" OR "Product Designer") AND (location OR "hiring" OR "available") -site:dribbble.com/shots -site:dribbble.com/stories',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            keywords: ['Dribbble', 'design'],
+        },
         promptGenerator: (submission, rubric) => `
             You are a Design Recruiting Specialist evaluating an X-Ray search string submission.
 
@@ -2004,6 +2104,10 @@ export const games: Game[] = [
         skillCategory: 'talent-intelligence' as const,
         exampleSolution: '1. Stripe (Best-in-class payments infra). 2. Adyen (Direct competitor, strong engineering culture). 3. Block/Square (Mature payments stack). 4. PayPal/Venmo (Deep talent pool in NYC). 5. Brex (Modern fintech stack). Strategy: Target these because their engineers solve similar high-scale transaction challenges.',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            minWords: 70,
+            minSentences: 4,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Market Mapping Expert evaluating a competitor company list submission.
 
@@ -2055,6 +2159,10 @@ export const games: Game[] = [
         skillCategory: 'talent-intelligence' as const,
         exampleSolution: 'Hi Sarah, I\'ve analyzed the current market for Staff AI Engineers in SF. Our $150k budget is in the 10th percentile; the median is closer to $220k for this level of experience. At $150k, we will likely only attract junior candidates or those requiring visa sponsorship. To hire a true Staff-level engineer who can lead the team, I recommend we either adjust the budget to $210k+ or re-scope the role to "Senior" level. Which path do you prefer?',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 60,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Compensation Analyst evaluating a budget negotiation email.
 
@@ -2106,6 +2214,10 @@ export const games: Game[] = [
         skillCategory: 'diversity' as const,
         exampleSolution: '1. Send the interview agenda and core questions 24 hours in advance to reduce anxiety. 2. Offer a "camera-off" option for the initial screen to lower sensory load. 3. Replace one abstract "behavioral" interview with a practical, take-home work sample test that mimics the actual job.',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            minWords: 40,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a DE&I Consultant evaluating interview accommodation suggestions.
 
@@ -2157,6 +2269,10 @@ export const games: Game[] = [
         skillCategory: 'screening' as const,
         exampleSolution: '1. "You\'ve had incredible impact in short stints. What specifically prompted your transition from Company A to Company B after only 9 months?" (Probes job hopping). 2. "Regarding the 500% growth - what was the starting revenue number, and what specific contribution was directly yours vs. the market trend?" (Probes attribution).',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            minWords: 40,
+            minSentences: 2,
+        },
         promptGenerator: (submission, rubric) => `
             You are an Executive Recruiter evaluating probing questions for a resume screening.
 
@@ -2208,6 +2324,10 @@ export const games: Game[] = [
         skillCategory: 'job-description' as const,
         exampleSolution: 'Stop scrolling! 🛑 Do you spend more time on TikTok than you sleep? We need a Social Media Manager for [Brand] who actually gets it. You\'ll own our entire content calendar, work with top creators, and yes - you can work from your couch. 🛋️ No degree required, just show us your best viral video. Link in bio to apply! 🚀',
         rubric: rubricByDifficulty.easy,
+        validation: {
+            minWords: 50,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Social Media Recruiter evaluating a video job advertisement script.
 
@@ -2259,6 +2379,9 @@ export const games: Game[] = [
         skillCategory: 'boolean' as const,
         exampleSolution: '(filetype:pdf OR filetype:doc OR filetype:docx) "Data Scientist" AND (Python OR R) AND ("machine learning" OR ML) AND (resume OR cv OR vitae) -job -sample -template',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            keywords: ['filetype', 'Data Scientist'],
+        },
         promptGenerator: (submission, rubric) => `
             You are a Google Search Hacker evaluating a Boolean search string for finding resumes.
 
@@ -2310,6 +2433,10 @@ export const games: Game[] = [
         skillCategory: 'linkedin' as const,
         exampleSolution: 'Past Company: Airbnb\nCurrent Company: NOT Airbnb\nYears of Experience: 5+ (Targeting seniors)\nKeywords: "Software Engineer" OR "Product Manager"\nInMail Strategy: "Miss you!"',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            minWords: 40,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a LinkedIn Power User evaluating LinkedIn Recruiter filter settings.
 
@@ -2361,6 +2488,10 @@ export const games: Game[] = [
         skillCategory: 'ats' as const,
         exampleSolution: '1. Match by Email Address (Unique Identifier): Run a script to group profiles with the exact same email. 2. Match by Name + Phone: For those with different emails, look for exact name AND phone matches. 3. Merge Rule: Always keep the "Most Recently Updated" profile as the master, but append notes/attachments from the older profile. Archive the old one.',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 50,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are an Ops Manager evaluating a data deduplication strategy.
 
@@ -2413,6 +2544,10 @@ export const games: Game[] = [
         skillCategory: 'negotiation' as const,
         exampleSolution: 'It\'s completely normal to feel torn—that counter-offer is a sign they value you. But let\'s go back to our first conversation. You mentioned you were feeling stagnant and wanted to move into AI-driven products, which your current role can\'t offer. Does a $20k raise solve that stagnation? Or does it just make the golden handcuffs tighter? I want you to make the best decision for your *career*, not just your wallet.',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 50,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Career Coach evaluating a counter-offer handling script. A participant has submitted their approach to helping a candidate who received a counter-offer.
 
@@ -2464,6 +2599,10 @@ export const games: Game[] = [
         skillCategory: 'negotiation' as const,
         exampleSolution: 'Think of the cash ($160k) as your rent and bills money—it\'s guaranteed. But the equity is your wealth-building money. If we hit our growth targets and the stock price doubles over 4 years, that equity grant isn\'t just a bonus; it could be worth more than your salary. You\'re not just an employee here; you\'re an owner. You get to benefit from the value you help create.',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            minWords: 50,
+            minSentences: 3,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Startup Advisor evaluating an equity explanation. A participant has submitted their approach to explaining equity value to a non-tech candidate.
 
@@ -2566,6 +2705,10 @@ export const games: Game[] = [
         skillCategory: 'talent-intelligence' as const,
         exampleSolution: 'While SF and London have top talent, they are the most competitive and expensive markets in the world. I recommend looking at Poland or Brazil. Both have massive supplies of high-quality Data Engineers (strong STEM education) at 40-60% of the cost. Plus, retention rates in these emerging hubs are significantly higher because we can be a top-tier employer there, rather than just another startup in SF.',
         rubric: rubricByDifficulty.medium,
+        validation: {
+            minWords: 70,
+            minSentences: 4,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Global Talent Strategist evaluating a location strategy pitch. A participant has submitted their proposal for an alternative remote hub location.
 
@@ -2617,6 +2760,10 @@ export const games: Game[] = [
         skillCategory: 'ai-prompting' as const,
         exampleSolution: 'You are a Boolean Search Generator. Your ONLY purpose is to output valid Boolean search strings. Rules: 1. Receive a job description or list of skills. 2. Output a Boolean string inside a code block. 3. Do NOT explain the string. 4. Do NOT say "Here is your string." 5. Use standard operators (AND, OR, NOT). 6. If the user input is vague, ask ONE clarifying question. Otherwise, just generate.',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            type: 'promptInstructions',
+            mustMention: ['Boolean', 'string'],
+        },
         promptGenerator: (submission, rubric) => `
             You are a Sourcing Automation Architect evaluating AI system instructions. A participant has submitted their system prompt for a Boolean search generator AI.
 
@@ -2665,9 +2812,15 @@ export const games: Game[] = [
         task: 'Your task: Write a multi-part sourcing strategy (Boolean + Platform + Outreach angle).',
         placeholder: 'e.g., Boolean: ... Platform: ... Outreach: ...',
         difficulty: 'hard' as const,
-        skillCategory: 'boolean' as const,
+        skillCategory: 'multi' as const,
         exampleSolution: 'Boolean: (Rust OR RustLang) AND (Cryptography OR Crypto OR "Zero Knowledge" OR ZK) AND (Japanese OR "JLPT" OR "Japanese speaker"). Platform: GitHub (search for Rust crypto repos), LinkedIn (filter by Language: Japanese), and Rust Community Discords. Outreach Angle: "Your unique blend of Rust + Crypto + Japanese is exactly what we need for our Tokyo-Zurich bridge team. We offer full relocation support to Switzerland."',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 80,
+            recommendedMinWords: 120,
+            minSentences: 3,
+            minChars: 300,
+        },
         promptGenerator: (submission, rubric) => `
             You are a Niche Sourcing Specialist evaluating a multi-part sourcing strategy. A participant has submitted their approach to finding a rare "Purple Squirrel" candidate.
 
@@ -2719,6 +2872,10 @@ export const games: Game[] = [
         skillCategory: 'talent-intelligence' as const,
         exampleSolution: 'Tools: Use free LinkedIn (optimize network), GitHub X-Ray (free), and a simple Trello/Notion board as an ATS. Process: Implement "Founder Sourcing" blocks (Founder sends 10 emails/week). Set up a generous Employee Referral Program (cash bonus). Brand: Write 1 high-quality engineering blog post per month to drive inbound. Focus on "High Touch" candidate experience to win against big tech.',
         rubric: rubricByDifficulty.hard,
+        validation: {
+            minWords: 80,
+            minSentences: 5,
+        },
         promptGenerator: (submission, rubric) => `
             You are a VP of Talent evaluating a guerrilla recruiting strategy. A participant has submitted their approach to hiring 20 engineers in 6 months with $0 budget.
 

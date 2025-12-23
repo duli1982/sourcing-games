@@ -1,11 +1,13 @@
 
 import React, { useState, useMemo } from 'react';
 import { usePlayerContext } from '../context/PlayerContext';
+import { useChallenges } from '../context/ChallengeContext';
 import AchievementsPanel from '../components/AchievementsPanel';
 import ProfileSettings from '../components/ProfileSettings';
 import ProgressChart from '../components/ProgressChart';
 import SkillRadar from '../components/SkillRadar';
 import ScoreDistribution from '../components/ScoreDistribution';
+import ShareButtons from '../components/ShareButtons';
 import { formatFeedback } from '../utils/feedbackFormatter';
 import {
     calculateProgressOverTime,
@@ -15,14 +17,18 @@ import {
     calculateStreak,
     TimeFilterType,
 } from '../utils/analyticsUtils';
+import { getPlayerProfileUrl } from '../utils/shareUtils';
+import { acceptChallenge, declineChallenge } from '../services/supabaseService';
 import { games } from '../data/games';
 import '../styles/feedback.css';
 
 const ProfilePage: React.FC = () => {
     const { player, getPlayerStats } = usePlayerContext();
+    const { challenges, refreshChallenges } = useChallenges();
     const [showHistory, setShowHistory] = useState(false);
     const [expandedFeedback, setExpandedFeedback] = useState<number | null>(null);
     const [timeFilter, setTimeFilter] = useState<TimeFilterType>('all');
+    const [processingChallenge, setProcessingChallenge] = useState<string | null>(null);
 
     if (!player) {
         return (
@@ -62,8 +68,37 @@ const ProfilePage: React.FC = () => {
 
     const streakData = useMemo(() => calculateStreak(player), [player]);
 
+    // Challenge handlers
+    const handleAcceptChallenge = async (challengeId: string) => {
+        setProcessingChallenge(challengeId);
+        try {
+            await acceptChallenge(challengeId);
+            await refreshChallenges();
+        } catch (error) {
+            console.error('Error accepting challenge:', error);
+        } finally {
+            setProcessingChallenge(null);
+        }
+    };
+
+    const handleDeclineChallenge = async (challengeId: string) => {
+        setProcessingChallenge(challengeId);
+        try {
+            await declineChallenge(challengeId);
+            await refreshChallenges();
+        } catch (error) {
+            console.error('Error declining challenge:', error);
+        } finally {
+            setProcessingChallenge(null);
+        }
+    };
+
+    // Separate challenges into received and sent
+    const receivedChallenges = challenges.filter(c => c.challenged_id === player.id);
+    const sentChallenges = challenges.filter(c => c.challenger_id === player.id);
+
     // Tab state for analytics sections
-    const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'challenges'>('overview');
 
     return (
         <div>
@@ -96,6 +131,22 @@ const ProfilePage: React.FC = () => {
                         <p className="text-gray-400 text-sm mb-1">Best Score</p>
                         <p className="text-2xl font-bold text-green-400">{stats.bestScore}/100</p>
                     </div>
+                </div>
+
+                {/* Share Profile Section */}
+                <div className="mt-6 pt-6 border-t border-gray-700">
+                    <p className="text-sm text-gray-400 mb-3">Share your profile:</p>
+                    <ShareButtons
+                        shareData={{
+                            type: 'profile',
+                            playerName: player.name,
+                            totalScore: player.score,
+                            gamesPlayed: stats.totalGamesPlayed,
+                            url: getPlayerProfileUrl(player.name)
+                        }}
+                        size="medium"
+                        showLabels={true}
+                    />
                 </div>
             </div>
 
@@ -130,6 +181,24 @@ const ProfilePage: React.FC = () => {
                     }`}
                 >
                     Analytics Dashboard
+                </button>
+                <button
+                    onClick={() => setActiveTab('challenges')}
+                    className={`px-6 py-3 rounded-lg font-semibold transition flex items-center gap-2 ${
+                        activeTab === 'challenges'
+                            ? 'bg-purple-500 text-white'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Challenges
+                    {receivedChallenges.filter(c => c.status === 'pending').length > 0 && (
+                        <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded-full">
+                            {receivedChallenges.filter(c => c.status === 'pending').length}
+                        </span>
+                    )}
                 </button>
             </div>
 
@@ -385,6 +454,215 @@ const ProfilePage: React.FC = () => {
                         </div>
                     )}
                 </>
+            )}
+
+            {/* Challenges Tab Content */}
+            {activeTab === 'challenges' && (
+                <div className="space-y-6">
+                    {/* Received Challenges */}
+                    <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
+                        <h3 className="text-xl font-bold text-purple-400 mb-4 flex items-center gap-2">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            Challenges You Received
+                        </h3>
+
+                        {receivedChallenges.length === 0 ? (
+                            <p className="text-gray-400 text-center py-8">
+                                No challenges received yet. Keep playing and other players might challenge you!
+                            </p>
+                        ) : (
+                            <div className="space-y-4">
+                                {receivedChallenges.map((challenge) => (
+                                    <div key={challenge.id} className="bg-gray-700 rounded-lg p-4">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div>
+                                                <h4 className="font-bold text-white text-lg">
+                                                    {challenge.game_title}
+                                                </h4>
+                                                <p className="text-sm text-gray-400">
+                                                    From: <span className="text-cyan-400">{challenge.challenger_name || 'Unknown'}</span>
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    {new Date(challenge.created_at).toLocaleDateString()}
+                                                </p>
+                                            </div>
+                                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                challenge.status === 'pending' ? 'bg-yellow-900 text-yellow-200' :
+                                                challenge.status === 'accepted' ? 'bg-blue-900 text-blue-200' :
+                                                challenge.status === 'completed' ? 'bg-green-900 text-green-200' :
+                                                challenge.status === 'declined' ? 'bg-red-900 text-red-200' :
+                                                'bg-gray-600 text-gray-200'
+                                            }`}>
+                                                {challenge.status.toUpperCase()}
+                                            </span>
+                                        </div>
+
+                                        {challenge.message && (
+                                            <div className="mb-3 p-3 bg-gray-800 rounded text-sm text-gray-300 italic">
+                                                "{challenge.message}"
+                                            </div>
+                                        )}
+
+                                        {/* Scores Display */}
+                                        {challenge.status === 'completed' && (
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                <div className="bg-gray-800 rounded p-3">
+                                                    <p className="text-xs text-gray-400">Their Score</p>
+                                                    <p className="text-xl font-bold text-cyan-400">
+                                                        {challenge.challenger_score || 0}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-gray-800 rounded p-3">
+                                                    <p className="text-xs text-gray-400">Your Score</p>
+                                                    <p className="text-xl font-bold text-purple-400">
+                                                        {challenge.challenged_score || 0}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Winner Display */}
+                                        {challenge.status === 'completed' && challenge.winner_id && (
+                                            <div className={`text-center py-2 rounded font-bold ${
+                                                challenge.winner_id === player.id
+                                                    ? 'bg-green-900 text-green-200'
+                                                    : 'bg-red-900 text-red-200'
+                                            }`}>
+                                                {challenge.winner_id === player.id ? '🏆 You Won!' : '😢 You Lost'}
+                                            </div>
+                                        )}
+
+                                        {/* Action Buttons */}
+                                        {challenge.status === 'pending' && (
+                                            <div className="flex gap-3 mt-3">
+                                                <button
+                                                    onClick={() => handleAcceptChallenge(challenge.id)}
+                                                    disabled={processingChallenge === challenge.id}
+                                                    className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {processingChallenge === challenge.id ? 'Processing...' : 'Accept Challenge'}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeclineChallenge(challenge.id)}
+                                                    disabled={processingChallenge === challenge.id}
+                                                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {processingChallenge === challenge.id ? 'Processing...' : 'Decline'}
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {challenge.status === 'accepted' && (
+                                            <div className="mt-3 text-center text-sm text-blue-300">
+                                                Go play <strong>{challenge.game_title}</strong> to complete this challenge!
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Sent Challenges */}
+                    <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
+                        <h3 className="text-xl font-bold text-cyan-400 mb-4 flex items-center gap-2">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                            </svg>
+                            Challenges You Sent
+                        </h3>
+
+                        {sentChallenges.length === 0 ? (
+                            <p className="text-gray-400 text-center py-8">
+                                You haven't challenged anyone yet. Visit other players' profiles to send challenges!
+                            </p>
+                        ) : (
+                            <div className="space-y-4">
+                                {sentChallenges.map((challenge) => (
+                                    <div key={challenge.id} className="bg-gray-700 rounded-lg p-4">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div>
+                                                <h4 className="font-bold text-white text-lg">
+                                                    {challenge.game_title}
+                                                </h4>
+                                                <p className="text-sm text-gray-400">
+                                                    To: <span className="text-purple-400">{challenge.challenged_name || 'Unknown'}</span>
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    {new Date(challenge.created_at).toLocaleDateString()}
+                                                </p>
+                                            </div>
+                                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                challenge.status === 'pending' ? 'bg-yellow-900 text-yellow-200' :
+                                                challenge.status === 'accepted' ? 'bg-blue-900 text-blue-200' :
+                                                challenge.status === 'completed' ? 'bg-green-900 text-green-200' :
+                                                challenge.status === 'declined' ? 'bg-red-900 text-red-200' :
+                                                'bg-gray-600 text-gray-200'
+                                            }`}>
+                                                {challenge.status.toUpperCase()}
+                                            </span>
+                                        </div>
+
+                                        {challenge.message && (
+                                            <div className="mb-3 p-3 bg-gray-800 rounded text-sm text-gray-300 italic">
+                                                "{challenge.message}"
+                                            </div>
+                                        )}
+
+                                        {/* Scores Display */}
+                                        {challenge.status === 'completed' && (
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                <div className="bg-gray-800 rounded p-3">
+                                                    <p className="text-xs text-gray-400">Your Score</p>
+                                                    <p className="text-xl font-bold text-cyan-400">
+                                                        {challenge.challenger_score || 0}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-gray-800 rounded p-3">
+                                                    <p className="text-xs text-gray-400">Their Score</p>
+                                                    <p className="text-xl font-bold text-purple-400">
+                                                        {challenge.challenged_score || 0}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Winner Display */}
+                                        {challenge.status === 'completed' && challenge.winner_id && (
+                                            <div className={`text-center py-2 rounded font-bold ${
+                                                challenge.winner_id === player.id
+                                                    ? 'bg-green-900 text-green-200'
+                                                    : 'bg-red-900 text-red-200'
+                                            }`}>
+                                                {challenge.winner_id === player.id ? '🏆 You Won!' : '😢 You Lost'}
+                                            </div>
+                                        )}
+
+                                        {challenge.status === 'pending' && (
+                                            <div className="mt-3 text-center text-sm text-yellow-300">
+                                                Waiting for {challenge.challenged_name || 'player'} to respond...
+                                            </div>
+                                        )}
+
+                                        {challenge.status === 'accepted' && (
+                                            <div className="mt-3 text-center text-sm text-blue-300">
+                                                Challenge accepted! Go play <strong>{challenge.game_title}</strong> to compete!
+                                            </div>
+                                        )}
+
+                                        {challenge.status === 'declined' && (
+                                            <div className="mt-3 text-center text-sm text-red-300">
+                                                Challenge declined by {challenge.challenged_name || 'player'}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
             )}
         </div>
     );

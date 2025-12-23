@@ -4,6 +4,7 @@ import { useUIContext } from '../context/UIContext';
 
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid } from 'recharts';
 import PlayerDetailModal from '../components/PlayerDetailModal';
+import FlaggedCommentsTable from '../components/FlaggedCommentsTable';
 import { AdminAnalytics, AdminPlayer, AdminAttempt, GameOverride } from '../types';
 
 const AdminPage: React.FC = () => {
@@ -17,7 +18,7 @@ const AdminPage: React.FC = () => {
   const [attempts, setAttempts] = useState<AdminAttempt[]>([]);
   const [gameOverrides, setGameOverrides] = useState<GameOverride[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'players' | 'attempts' | 'games'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'players' | 'attempts' | 'games' | 'flagged-comments'>('overview');
 
   // New feature states
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
@@ -36,7 +37,7 @@ const AdminPage: React.FC = () => {
     }
 
     try {
-      const response = await fetch('/api/admin/auth?action=login', {
+      const response = await fetch('/api/admin?action=login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -62,7 +63,7 @@ const AdminPage: React.FC = () => {
    */
   const handleLogout = async () => {
     try {
-      await fetch('/api/admin/auth?action=logout', {
+      await fetch('/api/admin?action=logout', {
         method: 'POST',
         credentials: 'include',
       });
@@ -86,10 +87,10 @@ const AdminPage: React.FC = () => {
     setIsLoading(true);
     try {
       const [analyticsRes, playersRes, attemptsRes, gamesRes] = await Promise.all([
-        fetch('/api/admin/analytics', { credentials: 'include' }),
-        fetch('/api/admin/players', { credentials: 'include' }),
-        fetch('/api/admin/attempts?limit=50', { credentials: 'include' }),
-        fetch('/api/admin/games', { credentials: 'include' }),
+        fetch('/api/admin?action=analytics', { credentials: 'include' }),
+        fetch('/api/admin?action=players', { credentials: 'include' }),
+        fetch('/api/admin?action=attempts&limit=50', { credentials: 'include' }),
+        fetch('/api/admin?action=games', { credentials: 'include' }),
       ]);
 
       if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
@@ -129,7 +130,7 @@ const AdminPage: React.FC = () => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await fetch('/api/admin/analytics', { credentials: 'include' });
+        const response = await fetch('/api/admin?action=analytics', { credentials: 'include' });
         if (response.ok) {
           setIsAuthorized(true);
           fetchAll();
@@ -147,7 +148,7 @@ const AdminPage: React.FC = () => {
       addToast('Please log in first', 'error');
       return;
     }
-    const res = await fetch('/api/admin/playerAction', {
+    const res = await fetch('/api/admin?action=player-action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include', // Send httpOnly cookie
@@ -171,7 +172,7 @@ const AdminPage: React.FC = () => {
       addToast('Please log in first', 'error');
       return;
     }
-    const res = await fetch('/api/admin/games', {
+    const res = await fetch('/api/admin?action=save-game', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include', // Send httpOnly cookie
@@ -541,17 +542,23 @@ const AdminPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <TabButton label="Overview" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} disabled={!isAuthorized} />
         <TabButton label="Players" active={activeTab === 'players'} onClick={() => setActiveTab('players')} disabled={!isAuthorized} />
         <TabButton label="Submissions" active={activeTab === 'attempts'} onClick={() => setActiveTab('attempts')} disabled={!isAuthorized} />
         <TabButton label="Games" active={activeTab === 'games'} onClick={() => setActiveTab('games')} disabled={!isAuthorized} />
+        <TabButton label="Flagged Comments" active={activeTab === 'flagged-comments'} onClick={() => setActiveTab('flagged-comments')} disabled={!isAuthorized} />
       </div>
 
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'players' && renderPlayers()}
       {activeTab === 'attempts' && renderAttempts()}
       {activeTab === 'games' && renderGames()}
+      {activeTab === 'flagged-comments' && (
+        <div className="bg-gray-800 rounded-lg p-4">
+          <FlaggedCommentsTable />
+        </div>
+      )}
       {/* Player Detail Modal */}
       {selectedPlayer && (
         <PlayerDetailModal

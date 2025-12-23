@@ -7,10 +7,11 @@ import { checkNewAchievements } from './_lib/data/achievements.js';
 import { rubricByDifficulty } from '../utils/rubrics.js';
 import { getSessionTokenFromCookie } from './_lib/utils/cookieUtils.js';
 
-const GEMINI_MAX_OUTPUT_TOKENS = 120;
+const GEMINI_MAX_OUTPUT_TOKENS = 500; // Increased from 120 for better detailed feedback
 const GEMINI_PROMPT_CHAR_LIMIT = 2800;
 const GEMINI_FALLBACK_MODEL = 'gemini-1.5-flash';
 const promptCache = new Map<string, string>();
+const SCORE_RECONCILIATION_THRESHOLD = 30; // If validation and AI scores differ by more than this, average them
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -130,6 +131,65 @@ const computePeerStats = (scores: number[], currentScore: number) => {
   const p15 = sorted[Math.max(0, Math.floor(0.15 * (sorted.length - 1)))];
   const p85 = sorted[Math.min(sorted.length - 1, Math.ceil(0.85 * (sorted.length - 1)))];
   return { percentile, p15, p85, count: sorted.length };
+};
+
+/**
+ * Calculate cosine similarity between two text embeddings
+ * Returns similarity score between 0 and 1
+ */
+const cosineSimilarity = (vecA: number[], vecB: number[]): number => {
+  if (vecA.length !== vecB.length) return 0;
+
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+
+  const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
+  return magnitude === 0 ? 0 : dotProduct / magnitude;
+};
+
+/**
+ * Calculate semantic similarity between submission and example solution
+ * using Gemini embeddings API
+ */
+const calculateEmbeddingSimilarity = async (
+  ai: GoogleGenAI,
+  submission: string,
+  exampleSolution: string
+): Promise<number> => {
+  try {
+    // Generate embeddings for both texts
+    const [submissionEmbedding, exampleEmbedding] = await Promise.all([
+      ai.models.embedContent({
+        model: 'text-embedding-004',
+        content: { parts: [{ text: submission }] }
+      } as any),
+      ai.models.embedContent({
+        model: 'text-embedding-004',
+        content: { parts: [{ text: exampleSolution }] }
+      } as any)
+    ]);
+
+    // Extract embedding vectors
+    const submissionVec = (submissionEmbedding as any)?.embedding?.values || [];
+    const exampleVec = (exampleEmbedding as any)?.embedding?.values || [];
+
+    if (submissionVec.length === 0 || exampleVec.length === 0) {
+      console.warn('Empty embedding vectors returned');
+      return 0;
+    }
+
+    return cosineSimilarity(submissionVec, exampleVec);
+  } catch (error) {
+    console.error('Embedding similarity calculation failed:', error);
+    return 0; // Graceful fallback
+  }
 };
 
 const sendError = (
@@ -259,26 +319,35 @@ Adjust detail and tone based on skill:
 
 Your feedback must:
 1. Start with 1-2 specific things the user did well (even if score is low)
-2. Explain the "why" behind each issue, not just identify it
-3. Provide concrete examples showing wrong vs. right approaches
-4. End with 2-3 specific, actionable next steps
-5. Use an encouraging but honest tone - celebrate wins, be direct about gaps
+2. Evaluate EACH rubric criterion explicitly - show how the submission performs on each criterion
+3. Explain the "why" behind each issue, not just identify it
+4. Provide concrete examples showing wrong vs. right approaches
+5. End with 2-3 specific, actionable next steps
+6. Use an encouraging but honest tone - celebrate wins, be direct about gaps
+
+IMPORTANT SCORING INSTRUCTIONS:
+- Consider the automated validation score as a baseline
+- Evaluate each rubric criterion individually and show your reasoning
+- Your final score should be fair and balanced, reflecting both strengths and weaknesses
+- If the submission has fundamental issues (missing requirements, off-topic), score accordingly low
+- If the submission is excellent and addresses all criteria, score accordingly high
 
 Required JSON Structure:
 {
   "score": number, // Integer between 0 and 100
   "feedback": "string" // HTML format with <strong>, <ul>, <li>, <p>. Structure:
                         // 1. What worked well (even if only 1-2 things)
-                        // 2. What needs improvement (specific issues)
-                        // 3. Why it matters (context/impact)
-                        // 4. How to improve (concrete examples)
-                        // 5. Next steps (2-3 actionable items)
+                        // 2. Rubric evaluation (how you scored each criterion)
+                        // 3. What needs improvement (specific issues)
+                        // 4. Why it matters (context/impact)
+                        // 5. How to improve (concrete examples)
+                        // 6. Next steps (2-3 actionable items)
 }
 
 Example Response:
 {
   "score": 65,
-  "feedback": "<p><strong>What worked well:</strong></p><ul><li>You included key skills (React, Node.js)</li><li>You used AND/OR operators</li></ul><p><strong>What needs improvement:</strong></p><ul><li>Missing parentheses around OR groups - this can return unintended results</li><li>No location targeting - you'll get global results instead of Vienna-specific</li></ul><p><strong>Why this matters:</strong> Without parentheses, 'React OR Vue AND developer' searches for (React) OR (Vue AND developer), not (React OR Vue) AND (developer).</p><p><strong>How to fix:</strong><br/>❌ React OR Vue AND developer<br/>✅ (React OR Vue) AND developer</p><p><strong>Next steps:</strong></p><ul><li>Add parentheses around all OR groups</li><li>Include location: (Vienna OR Wien)</li><li>Test your search and refine</li></ul>"
+  "feedback": "<p><strong>What worked well:</strong></p><ul><li>You included key skills (React, Node.js)</li><li>You used AND/OR operators</li></ul><p><strong>Rubric evaluation:</strong></p><ul><li>Completeness (20/30 pts): Covers main skills but missing location and seniority level</li><li>Technical accuracy (15/25 pts): Boolean syntax correct but lacks parentheses for grouping</li><li>Clarity (20/25 pts): Clear intent, easy to understand</li><li>Best practices (10/20 pts): Missing proximity operators and advanced techniques</li></ul><p><strong>What needs improvement:</strong></p><ul><li>Missing parentheses around OR groups - this can return unintended results</li><li>No location targeting - you'll get global results instead of Vienna-specific</li></ul><p><strong>Why this matters:</strong> Without parentheses, 'React OR Vue AND developer' searches for (React) OR (Vue AND developer), not (React OR Vue) AND (developer).</p><p><strong>How to fix:</strong><br/>❌ React OR Vue AND developer<br/>✅ (React OR Vue) AND developer</p><p><strong>Next steps:</strong></p><ul><li>Add parentheses around all OR groups</li><li>Include location: (Vienna OR Wien)</li><li>Test your search and refine</li></ul>"
 }
 
 Respond with valid JSON only. Do not include text outside the JSON object or any markdown fences.`;
@@ -331,7 +400,7 @@ ${genericRubric.map(r => `- ${r.criteria} (${r.points} pts): ${r.description}`).
 
     // Use the Gemini SDK
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash', // Using 2.5-flash (stable and reliable)
       contents: [{ role: 'user', parts: [{ text: trimmedPrompt }] }],
       config: {
         temperature: 0.35,
@@ -461,6 +530,92 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
         }
       }
     }
+
+    // Score Reconciliation: If validation and AI scores differ significantly, average them
+    if (validation && !usedAutomatedOnly) {
+      const scoreDifference = Math.abs(score - validation.score);
+
+      if (scoreDifference >= SCORE_RECONCILIATION_THRESHOLD) {
+        const reconciledScore = Math.round((score + validation.score) / 2);
+        console.log(`Score reconciliation: AI=${score}, Validation=${validation.score}, Difference=${scoreDifference}, Reconciled=${reconciledScore}`);
+
+        // Add reconciliation notice to feedback
+        const reconciliationNotice = `
+<div style="background:#1e293b;padding:10px;border-radius:8px;border:1px solid #f59e0b;margin-bottom:10px;">
+  <p><strong>⚖️ Score Reconciliation Applied</strong></p>
+  <p>AI assessment: ${score}/100 | Automated validation: ${validation.score}/100</p>
+  <p>These scores differed significantly (${scoreDifference} points), so we averaged them for fairness.</p>
+  <p><strong>Final score: ${reconciledScore}/100</strong></p>
+</div>`;
+
+        feedbackText = reconciliationNotice + feedbackText;
+        score = reconciledScore;
+      }
+    }
+
+    // IMPROVED: Scaled Embedding Similarity Bonus
+    // Rewards good solutions with graduated bonuses, not just near-perfect ones
+    let similarityBonus = 0;
+    if (game.exampleSolution && game.exampleSolution.trim().length > 0) {
+      try {
+        const similarity = await calculateEmbeddingSimilarity(ai, submission, game.exampleSolution);
+        console.log(`Embedding similarity for ${game.id}: ${(similarity * 100).toFixed(1)}%`);
+
+        // Scaled bonus system: rewards creative approaches that are "in the ballpark"
+        let bonusMessage = '';
+        let bonusBorderColor = '#3b82f6'; // Default blue
+        let bonusIcon = '📊';
+
+        if (similarity >= 0.9) {
+          // 90%+: Excellent - near perfect match
+          similarityBonus = 10;
+          bonusBorderColor = '#10b981'; // Green
+          bonusIcon = '🎯';
+          bonusMessage = 'Excellent! Your approach is nearly identical to the professional example solution. This is expert-level sourcing.';
+        } else if (similarity >= 0.85) {
+          // 85-89%: Very Good - strong alignment
+          similarityBonus = 8;
+          bonusBorderColor = '#10b981'; // Green
+          bonusIcon = '🎯';
+          bonusMessage = 'Very strong! Your approach closely aligns with professional best practices. Just minor differences from the ideal solution.';
+        } else if (similarity >= 0.8) {
+          // 80-84%: Good - solid approach
+          similarityBonus = 5;
+          bonusBorderColor = '#3b82f6'; // Blue
+          bonusIcon = '✨';
+          bonusMessage = 'Good work! Your approach is solidly aligned with professional standards. You\'re thinking in the right direction.';
+        } else if (similarity >= 0.75) {
+          // 75-79%: Decent - on the right track
+          similarityBonus = 3;
+          bonusBorderColor = '#3b82f6'; // Blue
+          bonusIcon = '👍';
+          bonusMessage = 'You\'re on the right track! Your approach shows good understanding, with room to refine toward the optimal strategy.';
+        } else if (similarity >= 0.7) {
+          // 70-74%: Positive feedback but no bonus
+          similarityBonus = 0;
+          bonusBorderColor = '#3b82f6'; // Blue
+          bonusIcon = '📊';
+          bonusMessage = 'Your approach is heading in a good direction. Review the example solution to see how to optimize further.';
+        }
+
+        if (similarity >= 0.7) {
+          score = Math.min(100, score + similarityBonus);
+
+          const similarityNotice = `
+<div style="background:#0f172a;padding:10px;border-radius:8px;border:1px solid ${bonusBorderColor};margin-bottom:10px;">
+  <p><strong>${bonusIcon} Similarity Analysis: ${similarityBonus > 0 ? `+${similarityBonus} points` : 'No bonus'}</strong></p>
+  <p>Your approach is <strong>${(similarity * 100).toFixed(1)}%</strong> semantically similar to the example solution.</p>
+  <p style="margin-top:6px;">${bonusMessage}</p>
+</div>`;
+
+          feedbackText = similarityNotice + feedbackText;
+        }
+      } catch (embeddingError) {
+        console.warn('Embedding similarity calculation failed:', embeddingError);
+        // Gracefully continue without similarity bonus
+      }
+    }
+
     // Enhance feedback for high scores (85%+)
     const enhancedFeedback = enhanceFeedbackForHighScores(feedbackText, score, game.title);
 

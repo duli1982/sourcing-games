@@ -48,7 +48,7 @@ const PlayerProfilePage: React.FC = () => {
         }
 
         const data = await response.json();
-        setPlayer(data.player);
+        setPlayer(data);
         setLoading(false);
       } catch (err) {
         console.error('Error fetching player profile:', err);

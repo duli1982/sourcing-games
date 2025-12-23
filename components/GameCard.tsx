@@ -11,9 +11,12 @@ import {
     validateGeneral,
     validateSimilarity,
     validateCultureAddNote,
+    validatePromptInstructions,
 } from '../utils/answerValidators';
 import { ValidationResult } from '../types';
 import { rubricByDifficulty } from '../utils/rubrics';
+import ShareButtons from './ShareButtons';
+import { getCurrentUrl, getPlayerProfileUrl } from '../utils/shareUtils';
 import '../styles/feedback.css';
 
 interface GameCardProps {
@@ -126,12 +129,29 @@ const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
 
         // Run client-side validation
         let validation: ValidationResult | undefined;
+        const validationType = (game.validation as any)?.type;
+
         if (game.id === 'game48') {
             validation = validateCultureAddNote(trimmedSubmission);
+        } else if (validationType === 'promptInstructions') {
+            validation = validatePromptInstructions(trimmedSubmission, {
+                mustMention: (game.validation as any)?.mustMention,
+            });
         } else if (game.skillCategory === 'boolean' || game.skillCategory === 'xray') {
-            validation = validateBooleanSearch(trimmedSubmission);
+            validation = validateBooleanSearch(
+                trimmedSubmission,
+                {
+                    keywords: (game.validation as any)?.keywords,
+                    location: (game.validation as any)?.location,
+                },
+                game.validation as any // Pass full config for flexible validation
+            );
         } else if (game.skillCategory === 'outreach') {
-            validation = validateOutreach(trimmedSubmission);
+            validation = validateOutreach(
+                trimmedSubmission,
+                (game.validation as any)?.maxWords,
+                game.validation as any // Pass full config for personalization analysis
+            );
         } else {
             validation = validateGeneral(trimmedSubmission, game.validation as any);
         }
@@ -376,6 +396,24 @@ const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
                                     Improvement: {improvementFromFirst >= 0 ? '+' : ''}{improvementFromFirst} points
                                 </p>
                             )}
+                        </div>
+                    )}
+
+                    {/* Share Buttons - Show after completing game */}
+                    {bestAttempt && bestAttempt.score >= 60 && player && (
+                        <div className="mt-4 pt-4 border-t border-gray-700">
+                            <p className="text-xs text-gray-400 mb-2">Share your achievement:</p>
+                            <ShareButtons
+                                shareData={{
+                                    type: 'game_score',
+                                    playerName: player.name,
+                                    score: bestAttempt.score,
+                                    gameTitle: game.title,
+                                    url: getPlayerProfileUrl(player.name)
+                                }}
+                                size="small"
+                                showLabels={false}
+                            />
                         </div>
                     )}
                 </div>

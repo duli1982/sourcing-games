@@ -6,6 +6,7 @@ import { UIProvider } from './context/UIContext';
 import { LeaderboardProvider } from './context/LeaderboardContext';
 import { PlayerProvider } from './context/PlayerContext';
 import { TeamProvider } from './context/TeamContext';
+import { ChallengeProvider } from './context/ChallengeContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -18,9 +19,11 @@ root.render(
     <UIProvider>
       <LeaderboardProvider>
         <PlayerProvider>
-          <TeamProvider>
-            <RouterWrapper />
-          </TeamProvider>
+          <ChallengeProvider>
+            <TeamProvider>
+              <RouterWrapper />
+            </TeamProvider>
+          </ChallengeProvider>
         </PlayerProvider>
       </LeaderboardProvider>
     </UIProvider>

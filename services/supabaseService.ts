@@ -808,3 +808,118 @@ export const fetchTeamLeaderboard = async (limit: number = 50): Promise<TeamLead
     return [];
   }
 };
+
+// ===== CHALLENGES FUNCTIONS =====
+
+/**
+ * Fetch player's challenges (sent and received)
+ */
+export const fetchPlayerChallenges = async (playerId: string) => {
+  try {
+    const response = await fetch(`/api/challenges?action=my-challenges&playerId=${encodeURIComponent(playerId)}`, {
+      method: 'GET',
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch challenges');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching player challenges:', error);
+    return [];
+  }
+};
+
+/**
+ * Create a new challenge
+ */
+export const createChallenge = async (challengeData: { challenged_id: string; game_id: string; game_title: string; message?: string }) => {
+  try {
+    const response = await fetch('/api/challenges?action=create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(challengeData)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to create challenge');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error creating challenge:', error);
+    throw error;
+  }
+};
+
+/**
+ * Accept a challenge
+ */
+export const acceptChallenge = async (challengeId: string) => {
+  try {
+    const response = await fetch(`/api/challenges?action=accept&challengeId=${challengeId}`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to accept challenge');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error accepting challenge:', error);
+    throw error;
+  }
+};
+
+/**
+ * Decline a challenge
+ */
+export const declineChallenge = async (challengeId: string) => {
+  try {
+    const response = await fetch(`/api/challenges?action=decline&challengeId=${challengeId}`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to decline challenge');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error declining challenge:', error);
+    throw error;
+  }
+};
+
+/**
+ * Submit score for a challenge
+ */
+export const submitChallengeScore = async (challengeId: string, score: number) => {
+  try {
+    const response = await fetch('/api/challenges?action=submit-score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ challengeId, score })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to submit score');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error submitting challenge score:', error);
+    throw error;
+  }
+};

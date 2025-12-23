@@ -73,6 +73,12 @@ export interface ValidationConfig {
   requiresParentheses?: boolean;
   requiresSite?: boolean;
   forbiddenPhrases?: string[];
+  // New flexible validation options
+  locationRequired?: boolean;           // Make location optional (default: false)
+  allowImplicitAND?: boolean;           // Allow searches without explicit AND operator
+  recognizePhrasesAsProximity?: boolean; // Treat "quoted phrases" as proximity operators
+  synonymMap?: Record<string, string[]>; // Custom synonym mappings per game
+  strictKeywordMatch?: boolean;         // If false, allows synonyms (default: false)
 }
 
 export interface Game {
@@ -128,7 +134,8 @@ export type SkillCategory =
   | 'job-description'  // Writing effective JDs
   | 'ai-prompting'     // AI Prompt Engineering
   | 'negotiation'      // Closing & Objection Handling
-  | 'talent-intelligence'; // Market Mapping & Strategy
+  | 'talent-intelligence' // Market Mapping & Strategy
+  | 'multi';           // Multi-part capstone challenges
 
 export type TimeFilter = 'all-time' | 'weekly' | 'monthly';
 
@@ -243,4 +250,71 @@ export interface CreateTeamData {
   name: string;
   description?: string;
   logoUrl?: string;
+}
+
+// ===== CHALLENGES =====
+export interface Challenge {
+  id: string;
+  challenger_id: string;
+  challenged_id: string;
+  game_id: string;
+  game_title: string;
+  status: 'pending' | 'accepted' | 'declined' | 'completed' | 'expired';
+  challenger_score: number | null;
+  challenged_score: number | null;
+  winner_id: string | null;
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  completed_at: string | null;
+  message: string | null;
+  updated_at: string;
+  // Populated fields
+  challenger_name?: string;
+  challenged_name?: string;
+  winner_name?: string;
+}
+
+export interface CreateChallengeData {
+  challenged_id: string;
+  game_id: string;
+  game_title: string;
+  message?: string;
+}
+
+// ===== COMMENTS & DISCUSSION THREADS =====
+export interface Comment {
+  id: string;
+  gameId: string;
+  playerId: string;
+  playerName: string;
+  content: string;
+  parentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  upvotes: number;
+  downvotes: number;
+  score: number; // upvotes - downvotes
+  flagCount: number;
+  isDeleted: boolean;
+  isHidden: boolean;
+  replyCount?: number;
+  userVote?: 'up' | 'down' | null;
+  replies?: Comment[]; // Nested replies (max 1 level)
+}
+
+export interface CommentFormData {
+  gameId: string;
+  content: string;
+  parentId?: string | null;
+}
+
+export interface CommentVote {
+  commentId: string;
+  voteType: 'up' | 'down' | 'remove';
+}
+
+export interface CommentFlag {
+  commentId: string;
+  reason?: string;
 }

@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Page } from '../types';
+import ChallengeNotificationBadge from './ChallengeNotificationBadge';
 
 interface HeaderProps {
     onNavigate: (page: Page) => void;
@@ -44,6 +45,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial
                             {item.label}
                         </button>
                     ))}
+                    <ChallengeNotificationBadge onClick={() => handleNavClick('profile')} />
                     <button
                         onClick={onOpenTutorial}
                         className="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors duration-200 flex items-center gap-1"
@@ -71,6 +73,9 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial
                             {item.label}
                         </button>
                     ))}
+                    <div className="py-2 px-4">
+                        <ChallengeNotificationBadge onClick={() => handleNavClick('profile')} />
+                    </div>
                     <button
                         onClick={() => { onOpenTutorial(); setIsMobileMenuOpen(false); }}
                         className="block w-full text-left py-2 px-4 text-sm text-gray-300 hover:bg-gray-700 transition-colors duration-200"
