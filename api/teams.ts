@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createTeam, joinTeamWithCode, leaveTeam, fetchTeamDetails, fetchPlayerTeams, fetchTeamLeaderboard } from '../services/supabaseService';
-import { getSessionTokenFromCookie } from './_lib/utils/cookieUtils';
+import { createTeam, joinTeamWithCode, leaveTeam, fetchTeamDetails, fetchPlayerTeams, fetchTeamLeaderboard } from '../services/supabaseService.js';
+import { getSessionTokenFromCookie } from './_lib/utils/cookieUtils.js';
 
 /**
  * Unified Teams API Endpoint

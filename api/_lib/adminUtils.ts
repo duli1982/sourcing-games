@@ -25,9 +25,11 @@ export const getAdminActor = (req: VercelRequest): string => {
  * Security: Validate admin access using httpOnly cookie instead of headers
  * This prevents admin token theft via XSS attacks
  */
-export const assertAdmin = (req: VercelRequest, res: VercelResponse): boolean => {
+export const assertAdmin = (req: VercelRequest, res: VercelResponse, respond: boolean = true): boolean => {
   if (!adminToken) {
-    res.status(500).json({ error: { code: 'admin_token_missing', message: 'Admin token is not configured on the server.' } });
+    if (respond) {
+      res.status(500).json({ error: { code: 'admin_token_missing', message: 'Admin token is not configured on the server.' } });
+    }
     return false;
   }
 
@@ -36,7 +38,9 @@ export const assertAdmin = (req: VercelRequest, res: VercelResponse): boolean =>
   const token = cookies.adminToken;
 
   if (!token || token !== adminToken) {
-    res.status(401).json({ error: { code: 'unauthorized', message: 'Admin access denied.' } });
+    if (respond) {
+      res.status(401).json({ error: { code: 'unauthorized', message: 'Admin access denied.' } });
+    }
     return false;
   }
   return true;

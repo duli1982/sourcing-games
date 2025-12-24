@@ -14,8 +14,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import DOMPurify from 'isomorphic-dompurify';
-import { getSessionTokenFromCookie } from './_lib/utils/cookieUtils';
-import { assertAdmin, getAdminSupabase, logAdminEvent } from './_lib/adminUtils';
+import { getSessionTokenFromCookie } from './_lib/utils/cookieUtils.js';
+import { assertAdmin, getAdminSupabase, logAdminEvent } from './_lib/adminUtils.js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL!;
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY!;
