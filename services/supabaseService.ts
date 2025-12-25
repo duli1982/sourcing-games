@@ -2,8 +2,19 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Player, PublicPlayer, PlayerStats, Team, TeamMember, CreateTeamData, TeamLeaderboardEntry } from '../types.js';
 import { generateInviteCode } from '../utils/teamUtils.js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Support both Vite (import.meta.env) and Node.js (process.env) environments
+const supabaseUrl = (typeof import.meta !== 'undefined' && import.meta.env)
+  ? import.meta.env.VITE_SUPABASE_URL
+  : (typeof process !== 'undefined' && process.env)
+    ? (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL)
+    : undefined;
+
+const supabaseAnonKey = (typeof import.meta !== 'undefined' && import.meta.env)
+  ? import.meta.env.VITE_SUPABASE_ANON_KEY
+  : (typeof process !== 'undefined' && process.env)
+    ? (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY)
+    : undefined;
+
 const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 const supabaseClient: SupabaseClient | null = isSupabaseConfigured
