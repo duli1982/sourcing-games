@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { Team, TeamMember, CreateTeamData } from '../types';
+import { usePlayerContext } from './PlayerContext';
 
 interface TeamContextType {
   currentTeam: Team | null;
@@ -34,6 +35,7 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
   const [userTeams, setUserTeams] = useState<Team[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { player } = usePlayerContext();
 
   const clearError = useCallback(() => {
     setError(null);
@@ -43,6 +45,10 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
    * Create a new team
    */
   const createTeam = useCallback(async (teamData: CreateTeamData): Promise<Team> => {
+    if (!player) {
+      throw new Error('You must be logged in to create a team');
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -52,7 +58,12 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(teamData),
+        credentials: 'include',
+        body: JSON.stringify({
+          ...teamData,
+          playerName: player.name,
+          playerId: player.id,
+        }),
       });
 
       if (!response.ok) {
@@ -74,12 +85,16 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [player]);
 
   /**
    * Join a team with invite code
    */
   const joinTeam = useCallback(async (inviteCode: string): Promise<Team> => {
+    if (!player) {
+      throw new Error('You must be logged in to join a team');
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -89,7 +104,12 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ inviteCode }),
+        credentials: 'include',
+        body: JSON.stringify({
+          inviteCode,
+          playerName: player.name,
+          playerId: player.id,
+        }),
       });
 
       if (!response.ok) {
@@ -111,12 +131,16 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [player]);
 
   /**
    * Leave a team
    */
   const leaveTeam = useCallback(async (teamId: string): Promise<void> => {
+    if (!player) {
+      throw new Error('You must be logged in to leave a team');
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -126,7 +150,11 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ teamId }),
+        credentials: 'include',
+        body: JSON.stringify({
+          teamId,
+          playerId: player.id,
+        }),
       });
 
       if (!response.ok) {
@@ -148,17 +176,23 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTeam]);
+  }, [player, currentTeam]);
 
   /**
    * Fetch all teams the user is a member of
    */
   const fetchUserTeams = useCallback(async (): Promise<void> => {
+    if (!player) {
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/teams?action=my-teams&playerId=' + player.id);
+      const response = await fetch('/api/teams?action=my-teams&playerId=' + player.id, {
+        credentials: 'include',
+      });
 
       if (!response.ok) {
         throw new Error('Failed to fetch user teams');
@@ -177,7 +211,7 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTeam]);
+  }, [player, currentTeam]);
 
   /**
    * Fetch detailed information about a specific team
@@ -187,7 +221,9 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({ children }) => {
     setError(null);
 
     try {
-      const response = await fetch(`/api/teams?action=details&teamId=${teamId}`);
+      const response = await fetch(`/api/teams?action=details&teamId=${teamId}`, {
+        credentials: 'include',
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
