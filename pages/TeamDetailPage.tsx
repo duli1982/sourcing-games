@@ -32,10 +32,16 @@ const TeamDetailPage: React.FC = () => {
       }
 
       try {
-        const response = await fetch(`/api/teams/${teamId}`);
+        const response = await fetch(`/api/teams?action=details&teamId=${encodeURIComponent(teamId)}`, {
+          credentials: 'include',
+        });
 
         if (!response.ok) {
-          throw new Error('Team not found');
+          const contentType = response.headers.get('content-type') || '';
+          const body = contentType.includes('application/json')
+            ? JSON.stringify(await response.json())
+            : (await response.text()).slice(0, 200);
+          throw new Error(`Team not found (HTTP ${response.status}): ${body}`);
         }
 
         const teamData: Team = await response.json();

@@ -199,6 +199,33 @@ export type AdminAttempt = {
   ts: string;
 };
 
+export type AdminTeamMember = {
+  id: string;
+  teamId: string;
+  playerId: string;
+  playerName: string;
+  role: 'owner' | 'admin' | 'member';
+  joinedAt: string;
+  score?: number;
+};
+
+export type AdminTeam = {
+  id: string;
+  name: string;
+  description?: string;
+  inviteCode: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  memberCount: number;
+  maxMembers: number;
+  isActive: boolean;
+  averageScore: number;
+  lastMemberJoinedAt: string | null;
+  lastActivityAt: string | null;
+  members: AdminTeamMember[];
+};
+
 export type GameOverride = {
   id: string;
   title?: string;

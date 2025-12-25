@@ -7,6 +7,7 @@ import AchievementsPanel from '../components/AchievementsPanel';
 import { Spinner } from '../components/Spinner';
 import Header from '../components/Header';
 import { useUIContext } from '../context/UIContext';
+import type { Page } from '../types';
 
 /**
  * PlayerProfilePage - Public player profile view
@@ -16,7 +17,7 @@ import { useUIContext } from '../context/UIContext';
 const PlayerProfilePage: React.FC = () => {
   const { playerName } = useParams<{ playerName: string }>();
   const navigate = useNavigate();
-  const { setCurrentPage } = useUIContext();
+  const { currentPage, setCurrentPage } = useUIContext();
   const [player, setPlayer] = useState<PublicPlayer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,11 @@ const PlayerProfilePage: React.FC = () => {
           if (response.status === 404) {
             setError('Player not found or profile is private');
           } else {
-            setError('Failed to load player profile');
+            const contentType = response.headers.get('content-type') || '';
+            const body = contentType.includes('application/json')
+              ? JSON.stringify(await response.json())
+              : (await response.text()).slice(0, 200);
+            setError(`Failed to load player profile (HTTP ${response.status}): ${body}`);
           }
           setPlayer(null);
           setLoading(false);
@@ -62,7 +67,7 @@ const PlayerProfilePage: React.FC = () => {
   }, [playerName]);
 
   // Handle navigation back to main app
-  const handleNavigate = (page: any) => {
+  const handleNavigate = (page: Page) => {
     setCurrentPage(page);
     navigate('/');
   };
@@ -70,7 +75,7 @@ const PlayerProfilePage: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900">
-        <Header onNavigate={handleNavigate} />
+        <Header onNavigate={handleNavigate} currentPage={currentPage} onOpenTutorial={() => {}} />
         <div className="flex items-center justify-center h-screen">
           <Spinner />
         </div>
@@ -81,7 +86,7 @@ const PlayerProfilePage: React.FC = () => {
   if (error || !player) {
     return (
       <div className="min-h-screen bg-gray-900">
-        <Header onNavigate={handleNavigate} />
+        <Header onNavigate={handleNavigate} currentPage={currentPage} onOpenTutorial={() => {}} />
         <div className="flex flex-col items-center justify-center h-screen px-4">
           <div className="bg-gray-800 rounded-lg p-8 max-w-md text-center">
             <svg
@@ -114,7 +119,7 @@ const PlayerProfilePage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header with navigation */}
-      <Header onNavigate={handleNavigate} />
+      <Header onNavigate={handleNavigate} currentPage={currentPage} onOpenTutorial={() => {}} />
 
       {/* Main Content */}
       <div className="max-w-6xl mx-auto px-4 py-8">

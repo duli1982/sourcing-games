@@ -5,7 +5,7 @@ import { useUIContext } from '../context/UIContext';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid } from 'recharts';
 import PlayerDetailModal from '../components/PlayerDetailModal';
 import FlaggedCommentsTable from '../components/FlaggedCommentsTable';
-import { AdminAnalytics, AdminPlayer, AdminAttempt, GameOverride } from '../types';
+import { AdminAnalytics, AdminAttempt, AdminPlayer, AdminTeam, AdminTeamMember, GameOverride } from '../types';
 
 const AdminPage: React.FC = () => {
   const { addToast } = useUIContext();
@@ -18,13 +18,16 @@ const AdminPage: React.FC = () => {
   const [attempts, setAttempts] = useState<AdminAttempt[]>([]);
   const [gameOverrides, setGameOverrides] = useState<GameOverride[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'players' | 'attempts' | 'games' | 'flagged-comments'>('overview');
+  const [teams, setTeams] = useState<AdminTeam[]>([]);
+  const [activeTab, setActiveTab] = useState<'overview' | 'players' | 'attempts' | 'games' | 'teams' | 'flagged-comments'>('overview');
 
   // New feature states
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
+  const [teamSearchQuery, setTeamSearchQuery] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<AdminPlayer | null>(null);
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
 
   /**
    * Security: Login using httpOnly cookies instead of localStorage
@@ -72,6 +75,7 @@ const AdminPage: React.FC = () => {
       setPlayers([]);
       setAttempts([]);
       setGameOverrides([]);
+      setTeams([]);
       addToast('Logged out', 'success');
     } catch (error) {
       addToast('Logout failed', 'error');
@@ -86,11 +90,12 @@ const AdminPage: React.FC = () => {
     if (!isAuthorized) return;
     setIsLoading(true);
     try {
-      const [analyticsRes, playersRes, attemptsRes, gamesRes] = await Promise.all([
+      const [analyticsRes, playersRes, attemptsRes, gamesRes, teamsRes] = await Promise.all([
         fetch('/api/admin?action=analytics', { credentials: 'include' }),
         fetch('/api/admin?action=players', { credentials: 'include' }),
         fetch('/api/admin?action=attempts&limit=50', { credentials: 'include' }),
         fetch('/api/admin?action=games', { credentials: 'include' }),
+        fetch('/api/admin?action=teams', { credentials: 'include' }),
       ]);
 
       if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
@@ -118,12 +123,72 @@ const AdminPage: React.FC = () => {
         const body = await gamesRes.json();
         setGameOverrides(body.overrides || []);
       }
+
+      if (teamsRes.ok) {
+        const body = await teamsRes.json();
+        setTeams(body.teams || []);
+      } else {
+        addToast('Failed to load teams', 'error');
+      }
     } catch (err) {
       addToast('Admin fetch failed', 'error');
     } finally {
       setIsLoading(false);
       setLastUpdated(new Date());
     }
+  };
+
+  const fetchTeams = async () => {
+    if (!isAuthorized) return;
+    try {
+      const res = await fetch('/api/admin?action=teams', { credentials: 'include' });
+      if (res.ok) {
+        const body = await res.json();
+        setTeams(body.teams || []);
+        return;
+      }
+      if (res.status === 401) {
+        setIsAuthorized(false);
+        addToast('Session expired, please log in again', 'error');
+        return;
+      }
+      addToast('Failed to load teams', 'error');
+    } catch {
+      addToast('Failed to load teams', 'error');
+    }
+  };
+
+  const handleTeamAction = async (
+    teamId: string,
+    action: 'activate' | 'deactivate' | 'regenerate-invite' | 'remove-member',
+    playerId?: string
+  ) => {
+    if (!isAuthorized) {
+      addToast('Please log in first', 'error');
+      return;
+    }
+
+    const res = await fetch('/api/admin?action=team-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ teamId, action, playerId }),
+    });
+
+    if (res.status === 401) {
+      setIsAuthorized(false);
+      addToast('Session expired, please log in again', 'error');
+      return;
+    }
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      addToast(body?.error?.message || 'Team action failed', 'error');
+      return;
+    }
+
+    addToast('Team updated', 'success');
+    fetchTeams();
   };
 
   // Check if already authenticated on mount (cookie may still be valid)
@@ -476,6 +541,147 @@ const AdminPage: React.FC = () => {
     </div>
   );
 
+  const formatDateTime = (ts: string | null) => ts ? new Date(ts).toLocaleString() : '—';
+
+  const renderTeams = () => (
+    <div className="bg-gray-800 rounded-lg p-4">
+      {!isAuthorized && (
+        <div className="bg-yellow-900 bg-opacity-40 border border-yellow-600 text-yellow-100 p-4 rounded">
+          Enter an admin token and click "Login" to view teams. This tab is locked until you authenticate.
+        </div>
+      )}
+      {isAuthorized && (
+        <>
+          <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+            <h4 className="text-lg font-bold text-white">Teams</h4>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="relative flex-1 md:w-72">
+                <input
+                  type="text"
+                  placeholder="Search teams..."
+                  value={teamSearchQuery}
+                  onChange={(e) => setTeamSearchQuery(e.target.value)}
+                  className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-cyan-500 text-sm"
+                />
+                {teamSearchQuery && (
+                  <button
+                    onClick={() => setTeamSearchQuery('')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              <button className="text-sm text-cyan-400 whitespace-nowrap" onClick={fetchTeams}>Refresh</button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {teams
+              .filter(t => t.name.toLowerCase().includes(teamSearchQuery.toLowerCase()))
+              .map((t) => {
+                const expanded = expandedTeamId === t.id;
+                return (
+                  <div key={t.id} className="bg-gray-700 rounded p-3">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="text-left text-white font-semibold hover:text-cyan-300"
+                            onClick={() => setExpandedTeamId(expanded ? null : t.id)}
+                          >
+                            {t.name}
+                          </button>
+                          <span className={`text-xs px-2 py-0.5 rounded ${t.isActive ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'}`}>
+                            {t.isActive ? 'active' : 'inactive'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-300">
+                          Members: {t.memberCount}/{t.maxMembers} • Avg: {t.averageScore} • Created by: {t.createdBy}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Last activity: {formatDateTime(t.lastActivityAt)} • Last join: {formatDateTime(t.lastMemberJoinedAt)}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className="px-3 py-1 rounded bg-gray-600 text-white text-xs"
+                          onClick={() => {
+                            navigator.clipboard.writeText(t.inviteCode);
+                            addToast('Invite code copied', 'success');
+                          }}
+                        >
+                          Copy Invite
+                        </button>
+                        <button
+                          className="px-3 py-1 rounded bg-gray-600 text-white text-xs"
+                          onClick={() => handleTeamAction(t.id, 'regenerate-invite')}
+                        >
+                          Regenerate Invite
+                        </button>
+                        {t.isActive ? (
+                          <button
+                            className="px-3 py-1 rounded bg-red-700 text-white text-xs"
+                            onClick={() => handleTeamAction(t.id, 'deactivate')}
+                          >
+                            Deactivate
+                          </button>
+                        ) : (
+                          <button
+                            className="px-3 py-1 rounded bg-green-700 text-white text-xs"
+                            onClick={() => handleTeamAction(t.id, 'activate')}
+                          >
+                            Activate
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {expanded && (
+                      <div className="mt-3 bg-gray-800 rounded p-3">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
+                          <p className="text-sm text-gray-200">
+                            Invite code: <span className="font-mono text-cyan-300">{t.inviteCode}</span>
+                          </p>
+                          <p className="text-xs text-gray-400">Team ID: {t.id}</p>
+                        </div>
+
+                        <div className="space-y-2">
+                          {(t.members || []).map((m: AdminTeamMember) => (
+                            <div key={m.id} className="bg-gray-700 rounded p-2 flex items-center justify-between gap-2">
+                              <div>
+                                <p className="text-white text-sm font-semibold">{m.playerName}</p>
+                                <p className="text-xs text-gray-300">
+                                  Role: {m.role} • Score: {m.score ?? 0} • Joined: {formatDateTime(m.joinedAt)}
+                                </p>
+                              </div>
+                              {m.role !== 'owner' && (
+                                <button
+                                  className="px-3 py-1 rounded bg-red-700 text-white text-xs"
+                                  onClick={() => handleTeamAction(t.id, 'remove-member', m.playerId)}
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {(!t.members || t.members.length === 0) && (
+                            <p className="text-gray-400 text-sm">No members found.</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            {teams.length === 0 && <p className="text-gray-400 text-sm">No teams yet.</p>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -547,6 +753,7 @@ const AdminPage: React.FC = () => {
         <TabButton label="Players" active={activeTab === 'players'} onClick={() => setActiveTab('players')} disabled={!isAuthorized} />
         <TabButton label="Submissions" active={activeTab === 'attempts'} onClick={() => setActiveTab('attempts')} disabled={!isAuthorized} />
         <TabButton label="Games" active={activeTab === 'games'} onClick={() => setActiveTab('games')} disabled={!isAuthorized} />
+        <TabButton label="Teams" active={activeTab === 'teams'} onClick={() => setActiveTab('teams')} disabled={!isAuthorized} />
         <TabButton label="Flagged Comments" active={activeTab === 'flagged-comments'} onClick={() => setActiveTab('flagged-comments')} disabled={!isAuthorized} />
       </div>
 
@@ -554,6 +761,7 @@ const AdminPage: React.FC = () => {
       {activeTab === 'players' && renderPlayers()}
       {activeTab === 'attempts' && renderAttempts()}
       {activeTab === 'games' && renderGames()}
+      {activeTab === 'teams' && renderTeams()}
       {activeTab === 'flagged-comments' && (
         <div className="bg-gray-800 rounded-lg p-4">
           <FlaggedCommentsTable />

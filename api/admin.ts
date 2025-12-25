@@ -10,10 +10,13 @@
  * POST /api/admin?action=save-game - Save game override
  * GET /api/admin?action=players - Get all players
  * POST /api/admin?action=player-action - Perform player action (ban/unban/reset-score)
+ * GET /api/admin?action=teams - Get teams with members + activity summary
+ * POST /api/admin?action=team-action - Perform team action (activate/deactivate/regenerate-invite/remove-member)
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { assertAdmin, getAdminSupabase, logAdminEvent } from './_lib/adminUtils.js';
+import { generateInviteCode } from '../utils/teamUtils.js';
 
 const ADMIN_TOKEN = process.env.ADMIN_DASH_TOKEN;
 const ONE_DAY = 60 * 60 * 24;
@@ -62,6 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!assertAdmin(req, res)) return;
 
     const supabase = getAdminSupabase();
+    const normalizeInviteCode = (code: string) => code.replace(/-/g, '').toUpperCase();
 
     // ==== GET ANALYTICS ====
     if (req.method === 'GET' && action === 'analytics') {
@@ -236,6 +240,196 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
       return res.status(200).json({ players });
+    }
+
+    // ==== GET TEAMS ====
+    if (req.method === 'GET' && action === 'teams') {
+      const { data: teams, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name, description, invite_code, created_by, created_at, updated_at, member_count, max_members, is_active')
+        .order('created_at', { ascending: false });
+
+      if (teamsError) {
+        return res.status(500).json({ error: { code: 'supabase_error', message: 'Failed to fetch teams', details: teamsError.message } });
+      }
+
+      const teamIds = (teams || []).map((t: any) => t.id);
+      const { data: members, error: membersError } = teamIds.length
+        ? await supabase
+          .from('team_members')
+          .select('id, team_id, player_id, player_name, role, joined_at')
+          .in('team_id', teamIds)
+          .order('joined_at', { ascending: true })
+        : { data: [], error: null };
+
+      if (membersError) {
+        return res.status(500).json({ error: { code: 'supabase_error', message: 'Failed to fetch team members', details: membersError.message } });
+      }
+
+      const playerIds = Array.from(new Set((members || []).map((m: any) => m.player_id))).filter(Boolean);
+      const { data: players, error: playersError } = playerIds.length
+        ? await supabase
+          .from('players')
+          .select('id, score, progress, updated_at')
+          .in('id', playerIds)
+        : { data: [], error: null };
+
+      if (playersError) {
+        return res.status(500).json({ error: { code: 'supabase_error', message: 'Failed to fetch team player scores', details: playersError.message } });
+      }
+
+      const playerMap = new Map<string, any>((players || []).map((p: any) => [p.id, p]));
+      const membersByTeam = new Map<string, any[]>();
+
+      for (const m of members || []) {
+        const list = membersByTeam.get(m.team_id) || [];
+        list.push(m);
+        membersByTeam.set(m.team_id, list);
+      }
+
+      const result = (teams || []).map((t: any) => {
+        const teamMembers = (membersByTeam.get(t.id) || []).map((m: any) => {
+          const p = playerMap.get(m.player_id);
+          const attempts = p?.progress?.attempts || [];
+          return {
+            id: m.id,
+            teamId: m.team_id,
+            playerId: m.player_id,
+            playerName: m.player_name,
+            role: m.role,
+            joinedAt: m.joined_at,
+            score: p?.score ?? 0,
+            lastPlayerUpdatedAt: p?.updated_at ?? null,
+            lastAttemptAt: attempts.length ? attempts[attempts.length - 1].ts : null,
+          };
+        });
+
+        const scores = teamMembers.map((m: any) => m.score ?? 0);
+        const averageScore = scores.length ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0;
+
+        const lastMemberJoinedAt = teamMembers.reduce((latest: string | null, m: any) => {
+          if (!m.joinedAt) return latest;
+          if (!latest) return m.joinedAt;
+          return new Date(m.joinedAt).getTime() > new Date(latest).getTime() ? m.joinedAt : latest;
+        }, null);
+
+        const lastActivityAt = teamMembers.reduce((latest: string | null, m: any) => {
+          const candidates = [m.lastAttemptAt, m.lastPlayerUpdatedAt].filter(Boolean) as string[];
+          for (const c of candidates) {
+            if (!latest) latest = c;
+            else if (new Date(c).getTime() > new Date(latest).getTime()) latest = c;
+          }
+          return latest;
+        }, t.updated_at ?? null);
+
+        return {
+          id: t.id,
+          name: t.name,
+          description: t.description,
+          inviteCode: t.invite_code,
+          createdBy: t.created_by,
+          createdAt: t.created_at,
+          updatedAt: t.updated_at,
+          memberCount: t.member_count ?? teamMembers.length,
+          maxMembers: t.max_members ?? 50,
+          isActive: t.is_active ?? true,
+          averageScore,
+          lastMemberJoinedAt,
+          lastActivityAt,
+          members: teamMembers.map(({ lastPlayerUpdatedAt, lastAttemptAt, ...rest }: any) => rest),
+        };
+      });
+
+      return res.status(200).json({ teams: result });
+    }
+
+    // ==== TEAM ACTIONS ====
+    if (req.method === 'POST' && action === 'team-action') {
+      const body = (req.body ?? {}) as {
+        teamId?: string;
+        action?: 'activate' | 'deactivate' | 'regenerate-invite' | 'remove-member';
+        playerId?: string;
+      };
+
+      if (!body.teamId || !body.action) {
+        return res.status(400).json({ error: { code: 'bad_request', message: 'teamId and action are required.' } });
+      }
+
+      const { data: teamRow, error: teamError } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('id', body.teamId)
+        .single();
+
+      if (teamError || !teamRow) {
+        return res.status(404).json({ error: { code: 'not_found', message: 'Team not found.' } });
+      }
+
+      if (body.action === 'activate' || body.action === 'deactivate') {
+        const isActive = body.action === 'activate';
+        const { error: updateError } = await supabase
+          .from('teams')
+          .update({ is_active: isActive, updated_at: new Date().toISOString() })
+          .eq('id', body.teamId);
+
+        if (updateError) {
+          return res.status(500).json({ error: { code: 'supabase_error', message: 'Failed to update team', details: updateError.message } });
+        }
+
+        await logAdminEvent(body.action, body.teamId, { isActive }, req);
+        return res.status(200).json({ success: true, isActive });
+      }
+
+      if (body.action === 'regenerate-invite') {
+        const newInvite = normalizeInviteCode(generateInviteCode());
+        const { error: updateError } = await supabase
+          .from('teams')
+          .update({ invite_code: newInvite, updated_at: new Date().toISOString() })
+          .eq('id', body.teamId);
+
+        if (updateError) {
+          return res.status(500).json({ error: { code: 'supabase_error', message: 'Failed to regenerate invite code', details: updateError.message } });
+        }
+
+        await logAdminEvent('regenerate-invite', body.teamId, null, req);
+        return res.status(200).json({ success: true, inviteCode: newInvite });
+      }
+
+      if (body.action === 'remove-member') {
+        if (!body.playerId) {
+          return res.status(400).json({ error: { code: 'bad_request', message: 'playerId is required for remove-member.' } });
+        }
+
+        const { data: membership, error: membershipError } = await supabase
+          .from('team_members')
+          .select('id, role')
+          .eq('team_id', body.teamId)
+          .eq('player_id', body.playerId)
+          .maybeSingle();
+
+        if (membershipError || !membership) {
+          return res.status(404).json({ error: { code: 'not_found', message: 'Member not found.' } });
+        }
+
+        if (membership.role === 'owner') {
+          return res.status(400).json({ error: { code: 'bad_request', message: 'Cannot remove the team owner.' } });
+        }
+
+        const { error: deleteError } = await supabase
+          .from('team_members')
+          .delete()
+          .eq('team_id', body.teamId)
+          .eq('player_id', body.playerId);
+
+        if (deleteError) {
+          return res.status(500).json({ error: { code: 'supabase_error', message: 'Failed to remove member', details: deleteError.message } });
+        }
+
+        await logAdminEvent('remove-member', body.teamId, { playerId: body.playerId }, req);
+        return res.status(200).json({ success: true });
+      }
+
+      return res.status(400).json({ error: { code: 'unsupported_action', message: 'Unsupported action' } });
     }
 
     // ==== PLAYER ACTION (ban/unban/reset-score) ====

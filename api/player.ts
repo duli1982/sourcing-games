@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { getSessionTokenFromCookie } from './_lib/utils/cookieUtils.js';
+import type { PlayerStats, PublicPlayer, Achievement } from '../types.js';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -27,6 +28,70 @@ const mapPlayer = (row: any) => ({
   socialLinks: row.social_links || {},
   createdAt: row.created_at,
 });
+
+const mapPublicPlayer = (row: any): PublicPlayer | null => {
+  if (!row) return null;
+
+  if (row.status && row.status !== 'active') {
+    return null;
+  }
+
+  if (row.profile_visibility === 'private') {
+    return null;
+  }
+
+  const attempts = row.progress?.attempts || [];
+  const achievements = row.progress?.achievements || [];
+
+  const totalGamesPlayed = attempts.length;
+  const averageScore = totalGamesPlayed > 0
+    ? Math.round(attempts.reduce((sum: number, a: any) => sum + (a.score ?? 0), 0) / totalGamesPlayed)
+    : 0;
+  const bestScore = totalGamesPlayed > 0
+    ? Math.max(...attempts.map((a: any) => a.score ?? 0))
+    : 0;
+
+  const gameBreakdown: Record<string, { gameId: string; gameTitle: string; attempts: number; bestScore: number }> = {};
+  attempts.forEach((attempt: any) => {
+    if (!attempt?.gameId) return;
+    if (!gameBreakdown[attempt.gameId]) {
+      gameBreakdown[attempt.gameId] = {
+        gameId: attempt.gameId,
+        gameTitle: attempt.gameTitle || attempt.gameId,
+        attempts: 0,
+        bestScore: 0,
+      };
+    }
+    gameBreakdown[attempt.gameId].attempts += 1;
+    gameBreakdown[attempt.gameId].bestScore = Math.max(gameBreakdown[attempt.gameId].bestScore, attempt.score ?? 0);
+  });
+
+  const stats: PlayerStats = {
+    totalGamesPlayed,
+    averageScore,
+    bestScore,
+    totalPoints: row.score ?? 0,
+    gameBreakdown: Object.values(gameBreakdown),
+  };
+
+  return {
+    name: row.name,
+    score: row.score ?? 0,
+    bio: row.bio,
+    avatarUrl: row.avatar_url,
+    socialLinks: row.social_links || {},
+    achievements: (achievements || []).map((ach: any): Achievement => ({
+      id: ach.id,
+      name: ach.name,
+      description: ach.description,
+      icon: ach.icon,
+      category: ach.category,
+      unlockedAt: ach.unlockedAt,
+    })),
+    stats,
+    createdAt: row.created_at,
+  };
+};
 
 /**
  * Unified Player API Endpoint
@@ -72,7 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (name && typeof name === 'string') {
       const { data: playerRow, error } = await supabase
         .from('players')
-        .select('*')
+        .select('id, name, score, status, bio, avatar_url, profile_visibility, social_links, progress, created_at')
         .ilike('name', name)
         .maybeSingle();
 
@@ -85,18 +150,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: 'Player not found' });
       }
 
-      // Check privacy settings
-      if (playerRow.profile_visibility === 'private') {
-        // Return limited public data for private profiles
-        return res.status(200).json({
-          name: playerRow.name,
-          score: playerRow.score ?? 0,
-          profileVisibility: 'private',
-          createdAt: playerRow.created_at,
-        });
+      const publicPlayer = mapPublicPlayer(playerRow);
+      if (!publicPlayer) {
+        return res.status(404).json({ error: 'Player not found or profile is private' });
       }
 
-      return res.status(200).json(mapPlayer(playerRow));
+      return res.status(200).json(publicPlayer);
     }
 
     return res.status(400).json({ error: 'Missing action or name parameter' });
