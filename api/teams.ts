@@ -1,6 +1,52 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createTeam, joinTeamWithCode, leaveTeam, fetchTeamDetails, fetchPlayerTeams, fetchTeamLeaderboard } from '../services/supabaseService.js';
+import type { Team, TeamMember, TeamLeaderboardEntry } from '../types.js';
+import { generateInviteCode } from '../utils/teamUtils.js';
+import { getServiceSupabase, isMissingTableError } from './_lib/supabaseServer.js';
 import { getSessionTokenFromCookie } from './_lib/utils/cookieUtils.js';
+
+const normalizeInviteCode = (code: string) => code.replace(/-/g, '').toUpperCase();
+
+const mapTeam = (row: any): Team => ({
+  id: row.id,
+  name: row.name,
+  description: row.description,
+  inviteCode: row.invite_code,
+  logoUrl: row.logo_url,
+  createdBy: row.created_by,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+  memberCount: row.member_count ?? 0,
+  maxMembers: row.max_members ?? 50,
+  isActive: row.is_active ?? true,
+});
+
+const mapTeamMember = (row: any): TeamMember => ({
+  id: row.id,
+  teamId: row.team_id,
+  playerId: row.player_id,
+  playerName: row.player_name,
+  role: row.role,
+  joinedAt: row.joined_at,
+});
+
+const getPlayerFromSession = async (req: VercelRequest, supabase: ReturnType<typeof getServiceSupabase>) => {
+  const sessionToken = getSessionTokenFromCookie(req);
+  if (!sessionToken) return null;
+
+  const { data: player, error } = await supabase
+    .from('players')
+    .select('id, name')
+    .eq('session_token', sessionToken)
+    .maybeSingle();
+
+  if (error) throw error;
+  return player as { id: string; name: string } | null;
+};
+
+const respondMissingTable = (res: VercelResponse, tableHint: string) =>
+  res.status(500).json({
+    error: `Database table missing (${tableHint}). Run the Supabase SQL migrations in /sql and then reload the schema cache.`,
+  });
 
 /**
  * Unified Teams API Endpoint
@@ -17,6 +63,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { action } = req.query;
 
   try {
+    const supabase = getServiceSupabase();
+
     // GET operations
     if (req.method === 'GET') {
       if (action === 'my-teams') {
@@ -24,8 +72,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!playerId || typeof playerId !== 'string') {
           return res.status(400).json({ error: 'Missing or invalid playerId' });
         }
-        const teams = await fetchPlayerTeams(playerId);
-        return res.status(200).json(teams);
+
+        const { data: memberRows, error: memberError } = await supabase
+          .from('team_members')
+          .select('team_id')
+          .eq('player_id', playerId);
+
+        if (memberError) {
+          if (isMissingTableError(memberError)) return respondMissingTable(res, 'team_members');
+          console.error('Failed to fetch team memberships:', memberError);
+          return res.status(500).json({ error: 'Failed to fetch teams' });
+        }
+
+        if (!memberRows || memberRows.length === 0) {
+          return res.status(200).json([]);
+        }
+
+        const teamIds = memberRows.map((m: any) => m.team_id);
+        const { data: teamRows, error: teamError } = await supabase
+          .from('teams')
+          .select('*')
+          .in('id', teamIds)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
+
+        if (teamError) {
+          if (isMissingTableError(teamError)) return respondMissingTable(res, 'teams');
+          console.error('Failed to fetch player teams:', teamError);
+          return res.status(500).json({ error: 'Failed to fetch teams' });
+        }
+
+        return res.status(200).json((teamRows ?? []).map(mapTeam));
       }
 
       if (action === 'leaderboard') {
@@ -34,8 +111,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
           return res.status(400).json({ error: 'Invalid limit parameter (must be 1-100)' });
         }
-        const leaderboard = await fetchTeamLeaderboard(limitNum);
-        return res.status(200).json(leaderboard);
+
+        const { data: teamRows, error: teamError } = await supabase
+          .from('teams')
+          .select('*')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
+
+        if (teamError) {
+          if (isMissingTableError(teamError)) return respondMissingTable(res, 'teams');
+          console.error('Failed to fetch teams leaderboard:', teamError);
+          return res.status(500).json({ error: 'Failed to fetch leaderboard' });
+        }
+
+        const teams = (teamRows ?? []).map(mapTeam);
+        const leaderboardEntries: TeamLeaderboardEntry[] = [];
+
+        for (const team of teams) {
+          const { data: memberRows, error: memberError } = await supabase
+            .from('team_members')
+            .select('player_id')
+            .eq('team_id', team.id);
+
+          if (memberError) {
+            if (isMissingTableError(memberError)) return respondMissingTable(res, 'team_members');
+            continue;
+          }
+
+          if (!memberRows || memberRows.length === 0) continue;
+
+          const playerIds = memberRows.map((m: any) => m.player_id);
+          const { data: playerRows } = await supabase
+            .from('players')
+            .select('score')
+            .in('id', playerIds);
+
+          const scores = playerRows?.map((p: any) => p.score ?? 0) || [];
+          const averageScore = scores.length > 0
+            ? Math.round(scores.reduce((sum: number, s: number) => sum + s, 0) / scores.length)
+            : 0;
+
+          leaderboardEntries.push({
+            team,
+            averageScore,
+            totalMembers: memberRows.length,
+            rank: 0,
+          });
+        }
+
+        leaderboardEntries.sort((a, b) => b.averageScore - a.averageScore);
+        leaderboardEntries.forEach((entry, index) => { entry.rank = index + 1; });
+
+        return res.status(200).json(leaderboardEntries.slice(0, limitNum));
       }
 
       if (action === 'details') {
@@ -43,10 +170,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!teamId || typeof teamId !== 'string') {
           return res.status(400).json({ error: 'Missing or invalid teamId' });
         }
-        const team = await fetchTeamDetails(teamId);
-        if (!team) {
+
+        const { data: teamRow, error: teamError } = await supabase
+          .from('teams')
+          .select('*')
+          .eq('id', teamId)
+          .single();
+
+        if (teamError) {
+          if (isMissingTableError(teamError)) return respondMissingTable(res, 'teams');
           return res.status(404).json({ error: 'Team not found' });
         }
+
+        const team = mapTeam(teamRow);
+
+        const { data: memberRows, error: memberError } = await supabase
+          .from('team_members')
+          .select('*')
+          .eq('team_id', teamId)
+          .order('joined_at', { ascending: true });
+
+        if (memberError) {
+          if (isMissingTableError(memberError)) return respondMissingTable(res, 'team_members');
+          return res.status(200).json(team);
+        }
+
+        const members = (memberRows ?? []).map(mapTeamMember);
+        const playerIds = members.map((m) => m.playerId);
+
+        const { data: playerRows } = await supabase
+          .from('players')
+          .select('id, score')
+          .in('id', playerIds);
+
+        const scoreMap = new Map<string, number>(playerRows?.map((p: any) => [p.id, p.score]) || []);
+        members.forEach((member) => { member.score = scoreMap.get(member.playerId) || 0; });
+
+        const totalScore = members.reduce((sum, m) => sum + (m.score || 0), 0);
+        team.averageScore = members.length > 0 ? Math.round(totalScore / members.length) : 0;
+        team.members = members;
         return res.status(200).json(team);
       }
 
@@ -55,27 +217,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // POST operations
     if (req.method === 'POST') {
-      // Get session token from cookie
-      const sessionToken = getSessionTokenFromCookie(req);
-      if (!sessionToken) {
-        return res.status(401).json({ error: 'Unauthorized - no session' });
-      }
+      const player = await getPlayerFromSession(req, supabase);
+      if (!player) return res.status(401).json({ error: 'Unauthorized - no session' });
 
       if (action === 'create') {
-        const { name, description, playerName, playerId } = req.body;
-        if (!name || !playerName || !playerId) {
-          console.error('Missing required fields:', { name, playerName, playerId });
+        const { name, description, logoUrl } = req.body;
+        if (!name) {
+          console.error('Missing required fields:', { name });
           return res.status(400).json({ error: 'Missing required fields' });
         }
         try {
-          const team = await createTeam({ name, description }, playerName, playerId);
-          if (!team) {
-            console.error('createTeam returned null');
+          const inviteCodePretty = generateInviteCode();
+          const inviteCode = normalizeInviteCode(inviteCodePretty);
+
+          const { data: teamRow, error: teamError } = await supabase
+            .from('teams')
+            .insert({
+              name,
+              description,
+              logo_url: logoUrl,
+              invite_code: inviteCode,
+              created_by: player.name,
+            })
+            .select()
+            .single();
+
+          if (teamError) {
+            if (isMissingTableError(teamError)) return respondMissingTable(res, 'teams');
+            console.error('Failed to create team in database:', teamError);
             return res.status(500).json({ error: 'Failed to create team' });
           }
-          return res.status(201).json(team);
+
+          const { error: memberError } = await supabase
+            .from('team_members')
+            .insert({
+              team_id: teamRow.id,
+              player_id: player.id,
+              player_name: player.name,
+              role: 'owner',
+            });
+
+          if (memberError) {
+            if (isMissingTableError(memberError)) return respondMissingTable(res, 'team_members');
+            await supabase.from('teams').delete().eq('id', teamRow.id);
+            console.error('Failed to add team owner:', memberError);
+            return res.status(500).json({ error: 'Failed to create team' });
+          }
+
+          // Re-fetch to get trigger-updated member_count
+          const { data: freshTeamRow } = await supabase.from('teams').select('*').eq('id', teamRow.id).single();
+          return res.status(201).json(mapTeam(freshTeamRow ?? teamRow));
         } catch (createError) {
           console.error('Error creating team:', createError);
+          if (isMissingTableError(createError)) return respondMissingTable(res, 'teams');
           return res.status(500).json({
             error: 'Failed to create team',
             details: createError instanceof Error ? createError.message : String(createError)
@@ -84,24 +278,97 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (action === 'join') {
-        const { inviteCode, playerName, playerId } = req.body;
-        if (!inviteCode || !playerName || !playerId) {
+        const { inviteCode } = req.body;
+        if (!inviteCode) {
           return res.status(400).json({ error: 'Missing required fields' });
         }
-        const team = await joinTeamWithCode(inviteCode, playerName, playerId);
-        if (!team) {
+
+        const normalized = normalizeInviteCode(inviteCode);
+        const { data: teamRow, error: teamError } = await supabase
+          .from('teams')
+          .select('*')
+          .eq('invite_code', normalized)
+          .eq('is_active', true)
+          .single();
+
+        if (teamError || !teamRow) {
+          if (teamError && isMissingTableError(teamError)) return respondMissingTable(res, 'teams');
           return res.status(404).json({ error: 'Invalid invite code or team not found' });
         }
-        return res.status(200).json(team);
+
+        if ((teamRow.member_count ?? 0) >= (teamRow.max_members ?? 50)) {
+          return res.status(400).json({ error: 'Team is full' });
+        }
+
+        const { data: existingMember, error: existingError } = await supabase
+          .from('team_members')
+          .select('id')
+          .eq('team_id', teamRow.id)
+          .eq('player_id', player.id)
+          .maybeSingle();
+
+        if (existingError) {
+          if (isMissingTableError(existingError)) return respondMissingTable(res, 'team_members');
+        }
+
+        if (!existingMember) {
+          const { error: memberError } = await supabase
+            .from('team_members')
+            .insert({
+              team_id: teamRow.id,
+              player_id: player.id,
+              player_name: player.name,
+              role: 'member',
+            });
+
+          if (memberError) {
+            if (isMissingTableError(memberError)) return respondMissingTable(res, 'team_members');
+            // Unique violation means they joined in another request; treat as success
+            if ((memberError as any)?.code !== '23505') {
+              console.error('Failed to join team:', memberError);
+              return res.status(500).json({ error: 'Failed to join team' });
+            }
+          }
+        }
+
+        const { data: freshTeamRow } = await supabase.from('teams').select('*').eq('id', teamRow.id).single();
+        return res.status(200).json(mapTeam(freshTeamRow ?? teamRow));
       }
 
       if (action === 'leave') {
-        const { teamId, playerId } = req.body;
-        if (!teamId || !playerId) {
+        const { teamId } = req.body;
+        if (!teamId) {
           return res.status(400).json({ error: 'Missing required fields' });
         }
-        const success = await leaveTeam(teamId, playerId);
-        if (!success) {
+
+        const { data: member, error: memberError } = await supabase
+          .from('team_members')
+          .select('role')
+          .eq('team_id', teamId)
+          .eq('player_id', player.id)
+          .maybeSingle();
+
+        if (memberError) {
+          if (isMissingTableError(memberError)) return respondMissingTable(res, 'team_members');
+          return res.status(400).json({ error: 'Cannot leave team (may be owner or not a member)' });
+        }
+
+        if (!member) {
+          return res.status(400).json({ error: 'Cannot leave team (may be owner or not a member)' });
+        }
+
+        if (member.role === 'owner') {
+          return res.status(400).json({ error: 'Team owner cannot leave. Delete the team or transfer ownership first.' });
+        }
+
+        const { error: leaveError } = await supabase
+          .from('team_members')
+          .delete()
+          .eq('team_id', teamId)
+          .eq('player_id', player.id);
+
+        if (leaveError) {
+          if (isMissingTableError(leaveError)) return respondMissingTable(res, 'team_members');
           return res.status(400).json({ error: 'Cannot leave team (may be owner or not a member)' });
         }
         return res.status(200).json({ success: true });

@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS challenges (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     -- Challenge participants
-    challenger_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-    challenged_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    challenger_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    challenged_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
 
     -- Game details
     game_id TEXT NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS challenges (
     -- Scores
     challenger_score INTEGER,
     challenged_score INTEGER,
-    winner_id TEXT REFERENCES players(id) ON DELETE SET NULL,
+    winner_id UUID REFERENCES players(id) ON DELETE SET NULL,
 
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -109,32 +109,9 @@ CREATE TRIGGER set_challenge_winner
     FOR EACH ROW
     EXECUTE FUNCTION determine_challenge_winner();
 
--- Add Row Level Security (RLS)
-ALTER TABLE challenges ENABLE ROW LEVEL SECURITY;
-
--- Policy: Anyone can read challenges they're involved in
-DROP POLICY IF EXISTS challenges_select_policy ON challenges;
-CREATE POLICY challenges_select_policy ON challenges
-    FOR SELECT
-    USING (
-        challenger_id = current_setting('request.jwt.claims', true)::json->>'player_id'
-        OR challenged_id = current_setting('request.jwt.claims', true)::json->>'player_id'
-    );
-
--- Policy: Anyone can create challenges
-DROP POLICY IF EXISTS challenges_insert_policy ON challenges;
-CREATE POLICY challenges_insert_policy ON challenges
-    FOR INSERT
-    WITH CHECK (true);
-
--- Policy: Only participants can update their challenges
-DROP POLICY IF EXISTS challenges_update_policy ON challenges;
-CREATE POLICY challenges_update_policy ON challenges
-    FOR UPDATE
-    USING (
-        challenger_id = current_setting('request.jwt.claims', true)::json->>'player_id'
-        OR challenged_id = current_setting('request.jwt.claims', true)::json->>'player_id'
-    );
+-- NOTE ABOUT RLS:
+-- This app uses server-side endpoints (Vercel) + session cookies, not Supabase Auth JWTs.
+-- Keep RLS disabled on `challenges` unless you are also implementing Supabase Auth + JWT-based policies.
 
 -- ==========================================
 -- VERIFICATION QUERIES

@@ -10,17 +10,20 @@
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 import { getSessionTokenFromCookie } from './_lib/utils/cookieUtils.js';
+import { getServiceSupabase, isMissingTableError } from './_lib/supabaseServer.js';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL!;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const respondMissingTable = (res: VercelResponse, tableHint: string) =>
+    res.status(500).json({
+        error: `Database table missing (${tableHint}). Run the Supabase SQL migrations in /sql and then reload the schema cache.`,
+    });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { action, playerId, challengeId } = req.query;
 
     try {
+        const supabase = getServiceSupabase();
+
         // ==== GET REQUESTS ====
         if (req.method === 'GET') {
             // Get player's challenges (sent and received)
@@ -38,6 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     .limit(50);
 
                 if (error) {
+                    if (isMissingTableError(error)) return respondMissingTable(res, 'challenges');
                     console.error('Error fetching challenges:', error);
                     return res.status(500).json({ error: 'Failed to fetch challenges' });
                 }
@@ -70,7 +74,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .eq('session_token', sessionToken)
                 .single();
 
-            if (playerError || !player) {
+            if (playerError) {
+                if (isMissingTableError(playerError)) return respondMissingTable(res, 'players');
+                return res.status(401).json({ error: 'Invalid session' });
+            }
+            if (!player) {
                 return res.status(401).json({ error: 'Invalid session' });
             }
 
@@ -108,6 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     .single();
 
                 if (error) {
+                    if (isMissingTableError(error)) return respondMissingTable(res, 'challenges');
                     console.error('Error creating challenge:', error);
                     return res.status(500).json({ error: 'Failed to create challenge' });
                 }
@@ -152,6 +161,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     .single();
 
                 if (error) {
+                    if (isMissingTableError(error)) return respondMissingTable(res, 'challenges');
                     console.error('Error accepting challenge:', error);
                     return res.status(500).json({ error: 'Failed to accept challenge' });
                 }
@@ -189,6 +199,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     .single();
 
                 if (error) {
+                    if (isMissingTableError(error)) return respondMissingTable(res, 'challenges');
                     console.error('Error declining challenge:', error);
                     return res.status(500).json({ error: 'Failed to decline challenge' });
                 }
@@ -241,6 +252,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     .single();
 
                 if (error) {
+                    if (isMissingTableError(error)) return respondMissingTable(res, 'challenges');
                     console.error('Error submitting score:', error);
                     return res.status(500).json({ error: 'Failed to submit score' });
                 }
@@ -254,6 +266,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (error) {
         console.error('Unexpected error in challenges API:', error);
+        if (isMissingTableError(error)) return respondMissingTable(res, 'challenges');
         return res.status(500).json({ error: 'Internal server error' });
     }
 }

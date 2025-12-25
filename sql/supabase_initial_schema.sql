@@ -3,7 +3,7 @@
 
 -- Create players table
 CREATE TABLE IF NOT EXISTS players (
-  id TEXT PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
   score INTEGER DEFAULT 0,
   status TEXT DEFAULT 'active' CHECK (status IN ('active', 'banned')),

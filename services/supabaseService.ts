@@ -491,8 +491,9 @@ export const createTeam = async (
 
   try {
     // Generate unique invite code
-    const inviteCode = generateInviteCode();
-    console.log('Generated invite code:', inviteCode);
+    const inviteCodePretty = generateInviteCode();
+    const inviteCode = inviteCodePretty.replace(/-/g, '').toUpperCase();
+    console.log('Generated invite code:', inviteCodePretty);
 
     // Insert team
     const { data: teamRow, error: teamError } = await supabaseClient
@@ -555,7 +556,7 @@ export const joinTeamWithCode = async (
     const { data: teamRow, error: teamError } = await supabaseClient
       .from('teams')
       .select('*')
-      .eq('invite_code', inviteCode.toUpperCase().replace('-', ''))
+      .eq('invite_code', inviteCode.toUpperCase().replace(/-/g, ''))
       .eq('is_active', true)
       .single();
 
