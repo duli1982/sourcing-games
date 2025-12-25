@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Player, PublicPlayer, PlayerStats, Team, TeamMember, CreateTeamData, TeamLeaderboardEntry } from '../types';
-import { generateInviteCode } from '../utils/teamUtils';
+import type { Player, PublicPlayer, PlayerStats, Team, TeamMember, CreateTeamData, TeamLeaderboardEntry } from '../types.js';
+import { generateInviteCode } from '../utils/teamUtils.js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
