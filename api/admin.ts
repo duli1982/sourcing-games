@@ -17,6 +17,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { assertAdmin, getAdminSupabase, logAdminEvent } from './_lib/adminUtils.js';
 import { generateInviteCode } from '../utils/teamUtils.js';
+import { computeTeamScore } from './_lib/teamScoring.js';
+import type { TimeFilter } from '../types.js';
 
 const ADMIN_TOKEN = process.env.ADMIN_DASH_TOKEN;
 const ONE_DAY = 60 * 60 * 24;
@@ -66,6 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const supabase = getAdminSupabase();
     const normalizeInviteCode = (code: string) => code.replace(/-/g, '').toUpperCase();
+    const timeFilter = (req.query.timeFilter as TimeFilter | undefined) || 'weekly';
 
     // ==== GET ANALYTICS ====
     if (req.method === 'GET' && action === 'analytics') {
@@ -304,8 +307,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           };
         });
 
-        const scores = teamMembers.map((m: any) => m.score ?? 0);
-        const averageScore = scores.length ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0;
+        const memberRefs = teamMembers.map((m: any) => ({ playerId: m.playerId }));
+        const { score: teamScore } = computeTeamScore(memberRefs, playerMap, timeFilter);
 
         const lastMemberJoinedAt = teamMembers.reduce((latest: string | null, m: any) => {
           if (!m.joinedAt) return latest;
@@ -333,7 +336,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           memberCount: t.member_count ?? teamMembers.length,
           maxMembers: t.max_members ?? 50,
           isActive: t.is_active ?? true,
-          averageScore,
+          averageScore: teamScore,
           lastMemberJoinedAt,
           lastActivityAt,
           members: teamMembers.map(({ lastPlayerUpdatedAt, lastAttemptAt, ...rest }: any) => rest),

@@ -597,7 +597,7 @@ const AdminPage: React.FC = () => {
                           </span>
                         </div>
                         <p className="text-xs text-gray-300">
-                          Members: {t.memberCount}/{t.maxMembers} • Avg: {t.averageScore} • Created by: {t.createdBy}
+                          Members: {t.memberCount}/{t.maxMembers} • Weekly score (Top 5 avg): {t.averageScore} • Created by: {t.createdBy}
                         </p>
                         <p className="text-xs text-gray-400">
                           Last activity: {formatDateTime(t.lastActivityAt)} • Last join: {formatDateTime(t.lastMemberJoinedAt)}

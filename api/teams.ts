@@ -3,6 +3,8 @@ import type { Team, TeamMember, TeamLeaderboardEntry } from '../types.js';
 import { generateInviteCode } from '../utils/teamUtils.js';
 import { getServiceSupabase, isMissingTableError } from './_lib/supabaseServer.js';
 import { getSessionTokenFromCookie } from './_lib/utils/cookieUtils.js';
+import { computeTeamScore } from './_lib/teamScoring.js';
+import type { TimeFilter } from '../types.js';
 
 const normalizeInviteCode = (code: string) => code.replace(/-/g, '').toUpperCase();
 
@@ -64,6 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const supabase = getServiceSupabase();
+    const timeFilter = (req.query.timeFilter as TimeFilter | undefined) || 'weekly';
 
     // GET operations
     if (req.method === 'GET') {
@@ -141,19 +144,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (!memberRows || memberRows.length === 0) continue;
 
           const playerIds = memberRows.map((m: any) => m.player_id);
-          const { data: playerRows } = await supabase
+          const { data: playerRows, error: playerError } = await supabase
             .from('players')
-            .select('score')
+            .select('id, score, progress')
             .in('id', playerIds);
 
-          const scores = playerRows?.map((p: any) => p.score ?? 0) || [];
-          const averageScore = scores.length > 0
-            ? Math.round(scores.reduce((sum: number, s: number) => sum + s, 0) / scores.length)
-            : 0;
+          if (playerError) {
+            if (isMissingTableError(playerError)) return respondMissingTable(res, 'players');
+            continue;
+          }
+
+          const playerMap = new Map<string, any>((playerRows ?? []).map((p: any) => [p.id, p]));
+          const members = playerIds.map((id: string) => ({ playerId: id }));
+          const { score: teamScore } = computeTeamScore(members, playerMap, timeFilter);
 
           leaderboardEntries.push({
             team,
-            averageScore,
+            averageScore: teamScore,
             totalMembers: memberRows.length,
             rank: 0,
           });
@@ -198,16 +205,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const members = (memberRows ?? []).map(mapTeamMember);
         const playerIds = members.map((m) => m.playerId);
 
-        const { data: playerRows } = await supabase
+        const { data: playerRows, error: playerError } = await supabase
           .from('players')
-          .select('id, score')
+          .select('id, score, progress')
           .in('id', playerIds);
 
-        const scoreMap = new Map<string, number>(playerRows?.map((p: any) => [p.id, p.score]) || []);
-        members.forEach((member) => { member.score = scoreMap.get(member.playerId) || 0; });
+        if (playerError) {
+          if (isMissingTableError(playerError)) return respondMissingTable(res, 'players');
+          return res.status(500).json({ error: 'Failed to fetch team players' });
+        }
 
-        const totalScore = members.reduce((sum, m) => sum + (m.score || 0), 0);
-        team.averageScore = members.length > 0 ? Math.round(totalScore / members.length) : 0;
+        const playerMap = new Map<string, any>((playerRows ?? []).map((p: any) => [p.id, p]));
+        members.forEach((member) => { member.score = playerMap.get(member.playerId)?.score ?? 0; });
+
+        const { score: teamScore } = computeTeamScore(members, playerMap, timeFilter);
+        team.averageScore = teamScore;
         team.members = members;
         return res.status(200).json(team);
       }
