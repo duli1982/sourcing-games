@@ -64,13 +64,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (action === 'create') {
         const { name, description, playerName, playerId } = req.body;
         if (!name || !playerName || !playerId) {
+          console.error('Missing required fields:', { name, playerName, playerId });
           return res.status(400).json({ error: 'Missing required fields' });
         }
-        const team = await createTeam({ name, description }, playerName, playerId);
-        if (!team) {
-          return res.status(500).json({ error: 'Failed to create team' });
+        try {
+          const team = await createTeam({ name, description }, playerName, playerId);
+          if (!team) {
+            console.error('createTeam returned null');
+            return res.status(500).json({ error: 'Failed to create team' });
+          }
+          return res.status(201).json(team);
+        } catch (createError) {
+          console.error('Error creating team:', createError);
+          return res.status(500).json({
+            error: 'Failed to create team',
+            details: createError instanceof Error ? createError.message : String(createError)
+          });
         }
-        return res.status(201).json(team);
       }
 
       if (action === 'join') {

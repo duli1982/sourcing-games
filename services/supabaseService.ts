@@ -476,13 +476,23 @@ export const createTeam = async (
   playerName: string,
   playerId: string
 ): Promise<Team | null> => {
+  console.log('createTeam called with:', { teamData, playerName, playerId });
+  console.log('Supabase config check:', {
+    isConfigured: isSupabaseConfigured,
+    hasClient: !!supabaseClient,
+    supabaseUrl,
+    hasAnonKey: !!supabaseAnonKey
+  });
+
   if (!ensureConfig() || !supabaseClient) {
+    console.error('Supabase not configured or client is null');
     return null;
   }
 
   try {
     // Generate unique invite code
     const inviteCode = generateInviteCode();
+    console.log('Generated invite code:', inviteCode);
 
     // Insert team
     const { data: teamRow, error: teamError } = await supabaseClient
@@ -498,9 +508,11 @@ export const createTeam = async (
       .single();
 
     if (teamError) {
-      console.error('Failed to create team:', teamError);
+      console.error('Failed to create team in database:', teamError);
       return null;
     }
+
+    console.log('Team created successfully:', teamRow);
 
     // Add creator as team owner
     const { error: memberError } = await supabaseClient
