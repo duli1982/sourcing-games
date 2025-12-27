@@ -13,6 +13,7 @@ import {
     validateCultureAddNote,
     validatePromptInstructions,
 } from '../utils/answerValidators';
+import { validateCandidateExperience } from '../utils/candidateExperienceValidator';
 import { ValidationResult } from '../types';
 import { rubricByDifficulty } from '../utils/rubrics';
 import ShareButtons from './ShareButtons';
@@ -147,11 +148,26 @@ const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
                 game.validation as any // Pass full config for flexible validation
             );
         } else if (game.skillCategory === 'outreach') {
-            validation = validateOutreach(
+            const outreachValidation = validateOutreach(
                 trimmedSubmission,
                 (game.validation as any)?.maxWords,
                 game.validation as any // Pass full config for personalization analysis
             );
+            const candidateExpValidation = validateCandidateExperience(trimmedSubmission);
+
+            // Combine both validations - Candidate experience is weighted more heavily (60/40)
+            validation = {
+                score: Math.round(candidateExpValidation.score * 0.6 + outreachValidation.score * 0.4),
+                checks: { ...outreachValidation.checks, ...candidateExpValidation.checks },
+                feedback: [
+                    ...(candidateExpValidation.feedback.length > 0 ? ['🎯 Candidate POV:', ...candidateExpValidation.feedback] : []),
+                    ...(outreachValidation.feedback.length > 0 ? ['📝 Technical Quality:', ...outreachValidation.feedback] : []),
+                ],
+                strengths: [
+                    ...(candidateExpValidation.strengths.length > 0 ? ['✅ Candidate Experience:', ...candidateExpValidation.strengths] : []),
+                    ...(outreachValidation.strengths.length > 0 ? ['✅ Message Quality:', ...outreachValidation.strengths] : []),
+                ],
+            };
         } else {
             validation = validateGeneral(trimmedSubmission, game.validation as any);
         }
