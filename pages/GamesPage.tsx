@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import GameCard from '../components/GameCard';
 import { games as baseGames } from '../data/games';
 import { Game, SkillCategory } from '../types';
-import { usePlayerContext } from '../context/PlayerContext';
 import { fetchGames } from '../services/gameService';
 
 
@@ -17,7 +16,6 @@ const getNextFriday = (): Date => {
 };
 
 const GamesPage: React.FC = () => {
-    const { player } = usePlayerContext();
     const [mode, setMode] = useState<'challenge' | 'practice'>('challenge');
     const [selectedGame, setSelectedGame] = useState<Game | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<SkillCategory | 'all'>('all');
@@ -29,7 +27,7 @@ const GamesPage: React.FC = () => {
 
     // Determine which game to show based on the week number
     // This creates a stable rotation that changes each week
-    const startDate = new Date('2025-01-03T00:00:00Z'); // First Friday of 2025
+    const startDate = new Date('2026-01-02T00:00:00Z'); // First Friday of 2026
     const now = new Date();
     const weeksPassed = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
     const gameIndex = games.length > 0 ? weeksPassed % games.length : 0;
@@ -62,20 +60,13 @@ const GamesPage: React.FC = () => {
         formatInTimezone(nextFridayUtc, 'America/New_York', 'ET')
     ];
 
-    // Determine which games are unlocked (played in Challenge mode)
-    const unlockedGameIds = useMemo(() => {
-        if (!player?.attempts) return new Set<number>();
-        return new Set(player.attempts.map(attempt => attempt.gameId));
-    }, [player?.attempts]);
-
-    // Filter games by category
+    // Filter games by category - ALL games are now unlocked for Practice Mode
     const filteredGames = selectedCategory === 'all'
         ? games
         : games.filter(g => g.skillCategory === selectedCategory);
 
-    // Separate unlocked and locked games
-    const unlockedGames = filteredGames.filter(g => unlockedGameIds.has(g.id));
-    const lockedGames = filteredGames.filter(g => !unlockedGameIds.has(g.id));
+    // All games are available in Practice Mode (no locks)
+    const practiceGames = filteredGames;
 
     // Get unique skill categories
     const skillCategories: SkillCategory[] = Array.from(new Set(games.map(g => g.skillCategory)));
@@ -184,15 +175,15 @@ const GamesPage: React.FC = () => {
                         </div>
                     ) : (
                         <div>
-                            {/* Unlocked Games */}
-                            {unlockedGames.length > 0 && (
+                            {/* All Games - Now Unlocked */}
+                            {practiceGames.length > 0 && (
                                 <div className="mb-8">
                                     <h3 className="text-xl font-bold text-purple-400 mb-4 flex items-center gap-2">
-                                        <span>🔓</span>
-                                        <span>Unlocked Games ({unlockedGames.length})</span>
+                                        <span>🎯</span>
+                                        <span>All Games ({practiceGames.length})</span>
                                     </h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {unlockedGames.map(game => {
+                                        {practiceGames.map(game => {
                                             const difficultyConfig = {
                                                 easy: { color: 'bg-green-600', text: 'Easy', icon: '⭐' },
                                                 medium: { color: 'bg-yellow-600', text: 'Medium', icon: '⭐⭐' },
@@ -228,52 +219,8 @@ const GamesPage: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Locked Games */}
-                            {lockedGames.length > 0 && (
-                                <div>
-                                    <h3 className="text-xl font-bold text-gray-500 mb-4 flex items-center gap-2">
-                                        <span>🔒</span>
-                                        <span>Locked Games ({lockedGames.length})</span>
-                                    </h3>
-                                    <p className="text-sm text-gray-400 mb-4">Complete these games in Weekly Challenge mode to unlock them for practice!</p>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {lockedGames.map(game => {
-                                            const difficultyConfig = {
-                                                easy: { color: 'bg-green-600', text: 'Easy', icon: '⭐' },
-                                                medium: { color: 'bg-yellow-600', text: 'Medium', icon: '⭐⭐' },
-                                                hard: { color: 'bg-red-600', text: 'Hard', icon: '⭐⭐⭐' }
-                                            };
-                                            const difficulty = difficultyConfig[game.difficulty];
-
-                                            return (
-                                                <div
-                                                    key={game.id}
-                                                    className="bg-gray-900 rounded-lg p-6 opacity-50 cursor-not-allowed border-2 border-gray-700"
-                                                >
-                                                    <div className="flex items-start justify-between mb-3">
-                                                        <h3 className="text-lg font-bold flex-1 text-gray-400">{game.title}</h3>
-                                                        <span className={`${difficulty.color} text-white text-xs font-bold px-2 py-1 rounded-full`}>
-                                                            {difficulty.icon}
-                                                        </span>
-                                                    </div>
-                                                    {game.featured && (
-                                                        <p className="text-xs text-cyan-500 font-semibold mb-2">Featured</p>
-                                                    )}
-                                                    <p className="text-gray-600 text-sm mb-3">Play this in Weekly Challenge to unlock</p>
-                                                    <div className="flex items-center gap-2 text-xs">
-                                                        <span className="bg-gray-800 text-gray-500 px-3 py-1 rounded-full font-semibold">
-                                                            {game.skillCategory}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Empty state if no games match filter */}
-                            {unlockedGames.length === 0 && lockedGames.length === 0 && (
+                            {practiceGames.length === 0 && (
                                 <div className="text-center py-12 text-gray-400">
                                     <p>No games found in this category.</p>
                                 </div>
