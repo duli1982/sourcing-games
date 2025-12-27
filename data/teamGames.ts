@@ -193,7 +193,7 @@ export const teamGames: Game[] = [
     {
         id: 'team-stackoverflow-2',
         title: 'Team Stack Overflow Challenge: Answer Quality Analysis',
-        description: 'Your team needs to find senior Python data engineers. The client wants candidates who don't just answer questions but provide deep, educational responses with code examples.',
+        description: 'Your team needs to find senior Python data engineers. The client wants candidates who don\'t just answer questions but provide deep, educational responses with code examples.',
         task: 'Create a team methodology to: 1) Identify high-quality answers (upvotes, accepted, code examples), 2) Distinguish between quick fixes and educational responses, 3) Assess consistency across multiple tags (python, pandas, sql, spark), 4) Evaluate teaching ability and communication skills.',
         placeholder: '[python] [pandas] [sql] accepted:yes votes:>10 ...',
         difficulty: 'medium' as const,
