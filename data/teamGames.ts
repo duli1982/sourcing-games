@@ -604,7 +604,7 @@ export const teamGames: Game[] = [
     {
         id: 'team-ats-2',
         title: 'Team ATS Challenge: Diversity Analytics',
-        description: 'Your team has access to ATS data showing: 40% of applicants are women, but only 15% make it to final rounds. Asian candidates: 25% of applicants, 30% of finalists. What's happening and how do you fix it?',
+        description: 'Your team has access to ATS data showing: 40% of applicants are women, but only 15% make it to final rounds. Asian candidates: 25% of applicants, 30% of finalists. What\'s happening and how do you fix it?',
         task: 'Develop a team analysis: 1) Identify where women candidates drop off (resume screen, phone screen, technical), 2) Hypothesis for why (bias, requirements, process), 3) Specific interventions to improve (blind resume review, diverse panels, etc.), 4) Success metrics to track.',
         placeholder: 'Women drop-off analysis:\nStage: ...\nHypothesis: ...\nInterventions: ...\nMetrics: ...',
         difficulty: 'medium' as const,
