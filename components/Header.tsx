@@ -1,16 +1,30 @@
 
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Page } from '../types';
 import ChallengeNotificationBadge from './ChallengeNotificationBadge';
+import { useUIContext } from '../context/UIContext';
 
 interface HeaderProps {
-    onNavigate: (page: Page) => void;
-    currentPage: Page;
-    onOpenTutorial: () => void;
+    onNavigate?: (page: Page) => void;
+    currentPage?: Page;
+    onOpenTutorial?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial }) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const routerNavigate = useNavigate();
+    const ui = useUIContext();
+    const effectiveCurrentPage = currentPage ?? ui.currentPage;
+
+    const pageToPath: Record<Page, string> = {
+        home: '/',
+        games: '/games',
+        leaderboard: '/leaderboard',
+        teams: '/teams',
+        profile: '/profile',
+        admin: '/admin',
+    };
 
     // Security: Admin nav always visible - authentication handled on admin page
     // (httpOnly cookies can't be checked client-side)
@@ -24,7 +38,12 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial
     ];
 
     const handleNavClick = (page: Page) => {
-        onNavigate(page);
+        if (onNavigate) {
+            onNavigate(page);
+        } else {
+            ui.setCurrentPage(page);
+            routerNavigate(pageToPath[page]);
+        }
         setIsMobileMenuOpen(false);
     };
 
@@ -37,17 +56,20 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial
                 </div>
                 <div className="hidden md:flex space-x-2 items-center">
                     {navItems.map(item => (
-                         <button
+                          <button
                             key={item.page}
                             onClick={() => handleNavClick(item.page)}
-                            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${currentPage === item.page ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+                            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${effectiveCurrentPage === item.page ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
                         >
                             {item.label}
                         </button>
                     ))}
                     <ChallengeNotificationBadge onClick={() => handleNavClick('profile')} />
                     <button
-                        onClick={onOpenTutorial}
+                        onClick={() => {
+                            if (onOpenTutorial) onOpenTutorial();
+                            else handleNavClick('home');
+                        }}
                         className="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors duration-200 flex items-center gap-1"
                         title="Open Tutorial"
                     >
@@ -68,7 +90,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial
                         <button
                             key={item.page}
                             onClick={() => handleNavClick(item.page)}
-                            className={`block w-full text-left py-2 px-4 text-sm  transition-colors duration-200 ${currentPage === item.page ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
+                            className={`block w-full text-left py-2 px-4 text-sm  transition-colors duration-200 ${effectiveCurrentPage === item.page ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
                         >
                             {item.label}
                         </button>
@@ -77,7 +99,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial
                         <ChallengeNotificationBadge onClick={() => handleNavClick('profile')} />
                     </div>
                     <button
-                        onClick={() => { onOpenTutorial(); setIsMobileMenuOpen(false); }}
+                        onClick={() => { if (onOpenTutorial) onOpenTutorial(); else handleNavClick('home'); setIsMobileMenuOpen(false); }}
                         className="block w-full text-left py-2 px-4 text-sm text-gray-300 hover:bg-gray-700 transition-colors duration-200"
                     >
                         ❓ Help

@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { usePlayerContext } from './context/PlayerContext';
 import { useUIContext } from './context/UIContext';
 import NameModal from './components/NameModal';
@@ -16,9 +17,39 @@ import { Page } from './types';
 
 const TUTORIAL_COMPLETED_KEY = 'ai-sourcing-tutorial-completed';
 
+const pageToPath: Record<Page, string> = {
+  home: '/',
+  games: '/games',
+  leaderboard: '/leaderboard',
+  teams: '/teams',
+  profile: '/profile',
+  admin: '/admin',
+};
+
+const pathToPage = (pathname: string): Page | null => {
+  switch (pathname) {
+    case '/':
+      return 'home';
+    case '/games':
+      return 'games';
+    case '/leaderboard':
+      return 'leaderboard';
+    case '/teams':
+      return 'teams';
+    case '/profile':
+      return 'profile';
+    case '/admin':
+      return 'admin';
+    default:
+      return null;
+  }
+};
+
 const App: React.FC = () => {
   const { player, isLoadingPlayer } = usePlayerContext();
   const { currentPage, setCurrentPage, toasts } = useUIContext();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [showTutorial, setShowTutorial] = useState(false);
 
   // Check if user has completed tutorial
@@ -36,10 +67,19 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('admin') === 'true') {
       setCurrentPage('admin');
+      navigate(pageToPath.admin);
       // Clean URL after navigation (optional - removes ?admin=true from URL)
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, [setCurrentPage]);
+  }, [navigate, setCurrentPage]);
+
+  // Sync state-based navigation with URL paths
+  useEffect(() => {
+    const pageFromPath = pathToPage(location.pathname);
+    if (pageFromPath && pageFromPath !== currentPage) {
+      setCurrentPage(pageFromPath);
+    }
+  }, [currentPage, location.pathname, setCurrentPage]);
 
   // Admin access via keyboard shortcut (Ctrl+Shift+A)
   useEffect(() => {
@@ -57,6 +97,7 @@ const App: React.FC = () => {
 
   const handleNavigate = (page: Page) => {
     setCurrentPage(page);
+    navigate(pageToPath[page]);
   };
 
   const handleTutorialComplete = () => {
