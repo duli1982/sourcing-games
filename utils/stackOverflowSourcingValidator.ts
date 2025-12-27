@@ -230,12 +230,12 @@ export function validateStackOverflowSourcing(
     const pitfalls = [
         {
             pattern: /\b(any\s+reputation|all\s+users|no\s+filter)/gi,
-            message: 'No quality threshold - you'll get noise. Set minimum reputation (1K+) and answer quality filters.',
+            message: 'No quality threshold - you\'ll get noise. Set minimum reputation (1K+) and answer quality filters.',
             penalty: 12,
         },
         {
             pattern: /\b(only|just)\s+(reputation|rep)/gi,
-            message: 'Reputation alone isn't enough - also check answer quality, tags, and teaching ability.',
+            message: 'Reputation alone isn\'t enough - also check answer quality, tags, and teaching ability.',
             penalty: 8,
         },
         {
