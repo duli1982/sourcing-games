@@ -99,6 +99,7 @@ export interface Game {
   rubric?: RubricItem[];
   validation?: Record<string, unknown>;
   featured?: boolean;
+  isTeamGame?: boolean; // True for team-specific games
 }
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -135,6 +136,7 @@ export type SkillCategory =
   | 'ai-prompting'     // AI Prompt Engineering
   | 'negotiation'      // Closing & Objection Handling
   | 'talent-intelligence' // Market Mapping & Strategy
+  | 'multiplatform'    // Multi-platform sourcing (GitHub, Stack Overflow, Reddit)
   | 'multi';           // Multi-part capstone challenges
 
 export type TimeFilter = 'all-time' | 'weekly' | 'monthly';
@@ -145,6 +147,22 @@ export interface Attempt {
   submission: string;
   score: number;
   skill?: SkillCategory;
+  ts: string; // ISO timestamp
+  feedback?: string;
+}
+
+// Team game attempts - separate from individual attempts
+export interface TeamAttempt {
+  id?: string;
+  teamId: string;
+  teamName: string;
+  gameId: string;
+  gameTitle: string;
+  submission: string;
+  score: number;
+  skill?: SkillCategory;
+  submittedBy: string; // Player ID who submitted on behalf of team
+  submittedByName: string; // Player name who submitted
   ts: string; // ISO timestamp
   feedback?: string;
 }
@@ -253,6 +271,8 @@ export interface Team {
   // Computed fields (not in DB)
   averageScore?: number;
   members?: TeamMember[];
+  teamAttempts?: TeamAttempt[]; // Team game attempts (separate from individual member attempts)
+  teamGameScore?: number; // Total score from team games only
 }
 
 export interface TeamMember {

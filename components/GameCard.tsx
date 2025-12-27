@@ -16,6 +16,9 @@ import {
 import { validateCandidateExperience } from '../utils/candidateExperienceValidator';
 import { validateDataDrivenSourcing } from '../utils/dataDrivenSourcingValidator';
 import { validatePassiveCandidateSequence } from '../utils/passiveCandidateSequenceValidator';
+import { validateGithubSourcing } from '../utils/githubSourcingValidator';
+import { validateStackOverflowSourcing } from '../utils/stackOverflowSourcingValidator';
+import { validateRedditSourcing } from '../utils/redditSourcingValidator';
 import { ValidationResult } from '../types';
 import { rubricByDifficulty } from '../utils/rubrics';
 import ShareButtons from './ShareButtons';
@@ -256,6 +259,54 @@ const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
                     ],
                 };
             }
+        } else if (game.skillCategory === 'multiplatform') {
+            // Multi-platform sourcing validation (GitHub, Stack Overflow, Reddit)
+            // Detect which platform based on game content
+            const gameContext = (game.description || '') + ' ' + (game.task || '') + ' ' + (game.title || '');
+
+            const isGitHub = /\b(github|git hub|repository|repo|open.?source|oss|commit|pull request|pr)\b/i.test(gameContext);
+            const isStackOverflow = /\b(stack\s*overflow|so|tag|reputation|answer|question)\b/i.test(gameContext);
+            const isReddit = /\b(reddit|subreddit|r\/|community|post|karma)\b/i.test(gameContext);
+
+            let platformValidation: ValidationResult;
+            let platformName: string;
+
+            if (isGitHub) {
+                platformValidation = validateGithubSourcing(trimmedSubmission);
+                platformName = 'GitHub';
+            } else if (isStackOverflow) {
+                platformValidation = validateStackOverflowSourcing(trimmedSubmission);
+                platformName = 'Stack Overflow';
+            } else if (isReddit) {
+                platformValidation = validateRedditSourcing(trimmedSubmission);
+                platformName = 'Reddit';
+            } else {
+                // Default to GitHub if platform unclear
+                platformValidation = validateGithubSourcing(trimmedSubmission);
+                platformName = 'Multi-Platform';
+            }
+
+            // Combine with data-driven validation (40/60 split)
+            const dataDrivenValidation = validateDataDrivenSourcing(trimmedSubmission);
+
+            validation = {
+                score: Math.round(
+                    platformValidation.score * 0.6 +
+                    dataDrivenValidation.score * 0.4
+                ),
+                checks: {
+                    ...platformValidation.checks,
+                    ...dataDrivenValidation.checks
+                },
+                feedback: [
+                    ...(platformValidation.feedback.length > 0 ? [`🔍 ${platformName} Strategy:`, ...platformValidation.feedback] : []),
+                    ...(dataDrivenValidation.feedback.length > 0 ? ['📊 Data & Metrics:', ...dataDrivenValidation.feedback] : []),
+                ],
+                strengths: [
+                    ...(platformValidation.strengths.length > 0 ? [`✅ ${platformName} Sourcing:`, ...platformValidation.strengths] : []),
+                    ...(dataDrivenValidation.strengths.length > 0 ? ['📊 Quantitative Thinking:', ...dataDrivenValidation.strengths] : []),
+                ],
+            };
         } else {
             validation = validateGeneral(trimmedSubmission, game.validation as any);
         }
