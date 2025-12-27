@@ -705,7 +705,7 @@ export const teamGames: Game[] = [
     {
         id: 'team-diversity-2',
         title: 'Team Diversity Challenge: Inclusive Job Descriptions',
-        description: 'Your team has a job description for "Senior Software Engineer" that's attracting 90% male applicants. Rewrite it to be more inclusive without lowering the bar.',
+        description: 'Your team has a job description for "Senior Software Engineer" that\'s attracting 90% male applicants. Rewrite it to be more inclusive without lowering the bar.',
         task: 'Create a team approach to: 1) Identify exclusionary language (rockstar, ninja, aggressive deadlines), 2) Rewrite requirements (remove "nice-to-haves" that discourage women), 3) Add inclusive benefits (parental leave, flexible hours, ERGs), 4) Test with diverse audience before posting.',
         placeholder: 'Original exclusionary language: ...\nRewritten requirements: ...\nInclusive additions: ...\nTesting plan: ...',
         difficulty: 'medium' as const,
