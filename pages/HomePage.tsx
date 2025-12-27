@@ -30,9 +30,60 @@ const HomePage: React.FC = () => {
                     <p className="text-gray-400">See how you stack up against your peers on a live, global leaderboard.</p>
                 </div>
             </div>
-            <button onClick={() => handleNavigate('games')} className="mt-8 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-6 rounded-md transition duration-300">
-                Go to The Games
-            </button>
+
+            {/* Game Tracks Section */}
+            <div className="mt-10 pt-8 border-t border-gray-700">
+                <h3 className="text-2xl font-bold text-white mb-6">Choose Your Track</h3>
+                <div className="grid md:grid-cols-2 gap-6">
+                    {/* Individual Games Track */}
+                    <div className="bg-gradient-to-br from-cyan-900/30 to-gray-700 p-6 rounded-lg border-2 border-cyan-600 hover:border-cyan-500 transition">
+                        <div className="flex items-center gap-3 mb-4">
+                            <span className="text-4xl">🏆</span>
+                            <h4 className="font-bold text-2xl text-cyan-400">Individual Games</h4>
+                        </div>
+                        <p className="text-gray-300 mb-4">
+                            Challenge yourself with daily individual sourcing games. Perfect your Boolean search, outreach,
+                            and talent intelligence skills solo.
+                        </p>
+                        <ul className="text-gray-400 text-sm mb-4 space-y-1">
+                            <li>• Daily rotation of sourcing challenges</li>
+                            <li>• AI-powered feedback on every submission</li>
+                            <li>• Personal score tracking and analytics</li>
+                            <li>• Global leaderboard rankings</li>
+                        </ul>
+                        <button
+                            onClick={() => handleNavigate('games')}
+                            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-6 rounded-md transition duration-300"
+                        >
+                            Play Individual Games →
+                        </button>
+                    </div>
+
+                    {/* Team Games Track */}
+                    <div className="bg-gradient-to-br from-purple-900/30 to-gray-700 p-6 rounded-lg border-2 border-purple-600 hover:border-purple-500 transition">
+                        <div className="flex items-center gap-3 mb-4">
+                            <span className="text-4xl">👥</span>
+                            <h4 className="font-bold text-2xl text-purple-400">Team Games</h4>
+                        </div>
+                        <p className="text-gray-300 mb-4">
+                            Collaborate with your team on advanced multi-platform sourcing challenges.
+                            Master GitHub, Stack Overflow, and Reddit sourcing strategies together.
+                        </p>
+                        <ul className="text-gray-400 text-sm mb-4 space-y-1">
+                            <li>• Bi-weekly team challenges (15th & end of month)</li>
+                            <li>• Multi-platform sourcing (GitHub, SO, Reddit)</li>
+                            <li>• Team-wide score tracking</li>
+                            <li>• Team leaderboard competition</li>
+                        </ul>
+                        <button
+                            onClick={() => handleNavigate('team-games')}
+                            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-md transition duration-300"
+                        >
+                            Play Team Games →
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
