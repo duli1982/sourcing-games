@@ -22,6 +22,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial
         games: '/games',
         leaderboard: '/leaderboard',
         teams: '/teams',
+        'team-games': '/team-games',
         profile: '/profile',
         admin: '/admin',
     };
@@ -33,6 +34,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial
         { page: 'games', label: 'The Games' },
         { page: 'leaderboard', label: 'Leaderboard' },
         { page: 'teams', label: 'Teams' },
+        { page: 'team-games', label: 'Team Games' },
         { page: 'profile', label: 'Profile' },
         { page: 'admin', label: 'Admin' },
     ];

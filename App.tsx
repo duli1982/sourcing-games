@@ -11,6 +11,7 @@ import GamesPage from './pages/GamesPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import ProfilePage from './pages/ProfilePage';
 import TeamsPage from './pages/TeamsPage';
+import TeamGamesPage from './pages/TeamGamesPage';
 import AdminPage from './pages/AdminPage';
 import Toast from './components/Toast';
 import { Page } from './types';
@@ -22,6 +23,7 @@ const pageToPath: Record<Page, string> = {
   games: '/games',
   leaderboard: '/leaderboard',
   teams: '/teams',
+  'team-games': '/team-games',
   profile: '/profile',
   admin: '/admin',
 };
@@ -36,6 +38,8 @@ const pathToPage = (pathname: string): Page | null => {
       return 'leaderboard';
     case '/teams':
       return 'teams';
+    case '/team-games':
+      return 'team-games';
     case '/profile':
       return 'profile';
     case '/admin':
@@ -135,6 +139,7 @@ const App: React.FC = () => {
           <div className={`page ${currentPage === 'games' ? 'active' : ''}`}><GamesPage /></div>
           <div className={`page ${currentPage === 'leaderboard' ? 'active' : ''}`}><LeaderboardPage /></div>
           <div className={`page ${currentPage === 'teams' ? 'active' : ''}`}><TeamsPage /></div>
+          <div className={`page ${currentPage === 'team-games' ? 'active' : ''}`}><TeamGamesPage /></div>
           <div className={`page ${currentPage === 'profile' ? 'active' : ''}`}><ProfilePage /></div>
           <div className={`page ${currentPage === 'admin' ? 'active' : ''}`}><AdminPage /></div>
         </div>

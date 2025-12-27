@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { usePlayerContext } from '../context/PlayerContext';
 import { useUIContext } from '../context/UIContext';
+import { useTeamContext } from '../context/TeamContext';
 import { Game, Player } from '../types';
 import { Spinner } from './Spinner';
 import { formatFeedback } from '../utils/feedbackFormatter';
@@ -35,6 +36,7 @@ const COOLDOWN_MS = 30000; // 30 seconds
 const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
     const { player, refreshPlayer } = usePlayerContext();
     const { addToast } = useUIContext();
+    const { currentTeam } = useTeamContext();
     const [submission, setSubmission] = useState('');
     const [feedback, setFeedback] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -328,39 +330,90 @@ const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
         // to let AI give the detailed feedback, but we send the validation result to the server.
 
         try {
-            const response = await fetch('/api/submitAttempt', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include', // Send httpOnly cookie with session token
-                body: JSON.stringify({
-                    // Security: sessionToken now sent via httpOnly cookie, not request body
-                    gameId: game.id,
-                    skillLevel,
-                    submission: trimmedSubmission,
-                    validation // Pass validation result to server
-                })
-            });
+            // Check if this is a team game
+            if (game.isTeamGame) {
+                // Team game submission
+                if (!currentTeam) {
+                    throw new Error('You must be part of a team to submit team game attempts');
+                }
 
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.error || `Request failed with ${response.status}`);
+                const response = await fetch('/api/team-games?action=submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        teamId: currentTeam.id,
+                        teamName: currentTeam.name,
+                        gameId: game.id,
+                        gameTitle: game.title,
+                        submission: trimmedSubmission,
+                        score: validation?.score ?? 0,
+                        skill: game.skillCategory,
+                        feedback: validation ? JSON.stringify({
+                            feedback: validation.feedback,
+                            strengths: validation.strengths,
+                            checks: validation.checks
+                        }) : undefined,
+                    })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.error || `Request failed with ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                addToast(`Team attempt submitted! Score: ${data.score}/100`, 'success');
+
+                // Show validation feedback for team games
+                if (validation) {
+                    const feedbackHtml = formatFeedback(
+                        validation.feedback.join('\n') + '\n\n' + validation.strengths.join('\n'),
+                        validation.score
+                    );
+                    setFeedback(feedbackHtml);
+                }
+                setLastSubmissionText(trimmedSubmission);
+                setLastScore(data.score ?? null);
+                setLastSubmitTime(Date.now());
+
+            } else {
+                // Individual game submission
+                const response = await fetch('/api/submitAttempt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include', // Send httpOnly cookie with session token
+                    body: JSON.stringify({
+                        // Security: sessionToken now sent via httpOnly cookie, not request body
+                        gameId: game.id,
+                        skillLevel,
+                        submission: trimmedSubmission,
+                        validation // Pass validation result to server
+                    })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.error || `Request failed with ${response.status}`);
+                }
+
+                const data: { score: number; feedback: string; player: Player } = await response.json();
+
+                if (data.player) {
+                    refreshPlayer(data.player);
+                }
+
+                if (typeof data.score === 'number') {
+                    addToast(`Score updated! +${data.score} points`, 'success');
+                }
+
+                const feedbackHtml = formatFeedback(data.feedback, data.score ?? 0);
+                setFeedback(feedbackHtml);
+                setLastSubmissionText(trimmedSubmission);
+                setLastScore(data.score ?? null);
+                setLastSubmitTime(Date.now());
             }
-
-            const data: { score: number; feedback: string; player: Player } = await response.json();
-
-            if (data.player) {
-                refreshPlayer(data.player);
-            }
-
-            if (typeof data.score === 'number') {
-                addToast(`Score updated! +${data.score} points`, 'success');
-            }
-
-            const feedbackHtml = formatFeedback(data.feedback, data.score ?? 0);
-            setFeedback(feedbackHtml);
-            setLastSubmissionText(trimmedSubmission);
-            setLastScore(data.score ?? null);
-            setLastSubmitTime(Date.now());
 
         } catch (error) {
             const message = error instanceof Error ? error.message : "An unknown error occurred.";

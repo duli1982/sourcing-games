@@ -36,7 +36,7 @@ export interface PublicPlayer {
   createdAt: string;
 }
 
-export type Page = 'home' | 'games' | 'leaderboard' | 'profile' | 'teams' | 'admin';
+export type Page = 'home' | 'games' | 'leaderboard' | 'profile' | 'teams' | 'team-games' | 'admin';
 
 export interface ChatMessage {
   sender: 'user' | 'coach';
