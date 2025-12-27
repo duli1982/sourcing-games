@@ -14,6 +14,7 @@ import {
     validatePromptInstructions,
 } from '../utils/answerValidators';
 import { validateCandidateExperience } from '../utils/candidateExperienceValidator';
+import { validateDataDrivenSourcing } from '../utils/dataDrivenSourcingValidator';
 import { ValidationResult } from '../types';
 import { rubricByDifficulty } from '../utils/rubrics';
 import ShareButtons from './ShareButtons';
@@ -166,6 +167,24 @@ const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
                 strengths: [
                     ...(candidateExpValidation.strengths.length > 0 ? ['✅ Candidate Experience:', ...candidateExpValidation.strengths] : []),
                     ...(outreachValidation.strengths.length > 0 ? ['✅ Message Quality:', ...outreachValidation.strengths] : []),
+                ],
+            };
+        } else if (game.skillCategory === 'ats' || game.skillCategory === 'diversity' || game.skillCategory === 'persona') {
+            // For strategy/ATS games, add data-driven validation
+            const baseValidation = validateGeneral(trimmedSubmission, game.validation as any);
+            const dataDrivenValidation = validateDataDrivenSourcing(trimmedSubmission);
+
+            // Combine validations - Data-driven is weighted 40%, base is 60%
+            validation = {
+                score: Math.round(baseValidation.score * 0.6 + dataDrivenValidation.score * 0.4),
+                checks: { ...baseValidation.checks, ...dataDrivenValidation.checks },
+                feedback: [
+                    ...(baseValidation.feedback.length > 0 ? baseValidation.feedback : []),
+                    ...(dataDrivenValidation.feedback.length > 0 ? ['📊 Data & Metrics:', ...dataDrivenValidation.feedback] : []),
+                ],
+                strengths: [
+                    ...(baseValidation.strengths.length > 0 ? baseValidation.strengths : []),
+                    ...(dataDrivenValidation.strengths.length > 0 ? ['📊 Quantitative Thinking:', ...dataDrivenValidation.strengths] : []),
                 ],
             };
         } else {
