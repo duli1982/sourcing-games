@@ -66,14 +66,14 @@ const HomePage: React.FC = () => {
                             <h4 className="font-bold text-2xl text-purple-400">Team Games</h4>
                         </div>
                         <p className="text-gray-300 mb-4">
-                            Collaborate with your team on advanced multi-platform sourcing challenges.
-                            Master GitHub, Stack Overflow, and Reddit sourcing strategies together.
+                            Team up for bi-weekly sourcing challenges that demand collaboration. Combine your strengths,
+                            learn from teammates, and compete as a unified squad.
                         </p>
                         <ul className="text-gray-400 text-sm mb-4 space-y-1">
                             <li>• Bi-weekly team challenges (15th & end of month)</li>
-                            <li>• Multi-platform sourcing (GitHub, SO, Reddit)</li>
-                            <li>• Team-wide score tracking</li>
-                            <li>• Team leaderboard competition</li>
+                            <li>• Collaborative problem-solving with AI feedback</li>
+                            <li>• Shared team scores and achievement tracking</li>
+                            <li>• Team rankings and competitive leaderboards</li>
                         </ul>
                         <button
                             onClick={() => handleNavigate('team-games')}
