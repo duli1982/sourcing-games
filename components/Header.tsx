@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page } from '../types';
 import ChallengeNotificationBadge from './ChallengeNotificationBadge';
@@ -27,8 +27,8 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial
         admin: '/admin',
     };
 
-    // Security: Admin nav always visible - authentication handled on admin page
-    // (httpOnly cookies can't be checked client-side)
+    // Admin page accessible via direct URL (/admin) only - not shown in navigation
+    // Authentication handled on admin page via token
     const navItems: { page: Page; label: string }[] = [
         { page: 'home', label: 'Home' },
         { page: 'games', label: 'The Games' },
@@ -36,7 +36,6 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage, onOpenTutorial
         { page: 'teams', label: 'Teams' },
         { page: 'team-games', label: 'Team Games' },
         { page: 'profile', label: 'Profile' },
-        { page: 'admin', label: 'Admin' },
     ];
 
     const handleNavClick = (page: Page) => {
