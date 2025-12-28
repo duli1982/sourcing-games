@@ -18,10 +18,10 @@ const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({ onComplete }) =
                     <div className="bg-gray-700 p-4 rounded-lg">
                         <h4 className="font-bold text-cyan-400 mb-2">What You'll Do:</h4>
                         <ul className="space-y-2 text-gray-300">
-                            <li>✅ Solve real-world sourcing challenges</li>
-                            <li>✅ Get AI-powered feedback from our coach</li>
-                            <li>✅ Earn points and climb the leaderboard</li>
-                            <li>✅ Unlock achievements as you improve</li>
+                            <li>✅ Play individual games weekly or collaborate with teams bi-weekly</li>
+                            <li>✅ Get AI-powered feedback on every scored submission</li>
+                            <li>✅ Earn points and climb multiple leaderboards</li>
+                            <li>✅ Build your skills solo and strengthen teamwork abilities</li>
                         </ul>
                     </div>
                     <p className="text-sm text-gray-400 italic">
@@ -58,10 +58,10 @@ const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({ onComplete }) =
                     <div className="bg-gray-700 p-4 rounded-lg">
                         <h4 className="font-bold text-white mb-2">Important:</h4>
                         <ul className="space-y-2 text-sm text-gray-300">
-                            <li>📈 <strong>Scores are cumulative</strong> - every submission adds to your total</li>
-                            <li>🔄 <strong>You can retry</strong> - improve your skills with unlimited attempts</li>
-                            <li>⏱️ <strong>30-second cooldown</strong> between submissions</li>
-                            <li>🏆 <strong>Higher total score</strong> = Higher leaderboard rank</li>
+                            <li>🎯 <strong>Best score per game counts</strong> - only your highest score for each game</li>
+                            <li>📊 <strong>Total score</strong> - sum of your best scores across all games</li>
+                            <li>🔄 <strong>Unlimited retries</strong> - improve your best scores anytime</li>
+                            <li>🏆 <strong>Higher total</strong> = Higher leaderboard rank</li>
                         </ul>
                     </div>
                 </div>
@@ -106,6 +106,49 @@ const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({ onComplete }) =
                 </div>
             ),
             icon: "🎮"
+        },
+        {
+            title: "Teams & Team Games 👥",
+            content: (
+                <div className="space-y-4">
+                    <p className="text-gray-300">
+                        Join forces with other recruiters and tackle collaborative challenges together!
+                    </p>
+
+                    <div className="bg-purple-900/30 p-4 rounded-lg border-2 border-purple-600">
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="text-2xl">👥</span>
+                            <h4 className="font-bold text-purple-400 text-lg">Team Games</h4>
+                        </div>
+                        <ul className="space-y-1 text-sm text-gray-300 ml-8">
+                            <li>✅ New challenge every 2 weeks (15th & end of month)</li>
+                            <li>✅ Collaborate with your team on one submission</li>
+                            <li>✅ Team's best score per game counts</li>
+                            <li>✅ Compete on Team Games Leaderboard</li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-cyan-900/30 p-4 rounded-lg border-2 border-cyan-600">
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="text-2xl">🏆</span>
+                            <h4 className="font-bold text-cyan-400 text-lg">Teams Leaderboard</h4>
+                        </div>
+                        <ul className="space-y-1 text-sm text-gray-300 ml-8">
+                            <li>✅ Join or create teams with other players</li>
+                            <li>✅ Your individual game scores contribute to team total</li>
+                            <li>✅ Be on multiple teams simultaneously</li>
+                            <li>✅ Compete as a unified squad</li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-gray-700 p-3 rounded-lg">
+                        <p className="text-sm text-purple-300">
+                            💡 <strong>Pro Tip:</strong> Teams are optional but unlock collaborative challenges and networking opportunities!
+                        </p>
+                    </div>
+                </div>
+            ),
+            icon: "👥"
         },
         {
             title: "Achievements & Progress 🏅",
@@ -160,11 +203,11 @@ const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({ onComplete }) =
                     <div className="bg-gray-700 p-6 rounded-lg text-left">
                         <h4 className="font-bold text-cyan-400 mb-3 text-center">Quick Recap:</h4>
                         <ul className="space-y-2 text-sm text-gray-300">
-                            <li>1️⃣ Play <strong className="text-cyan-400">Weekly Challenge</strong> for points & AI feedback</li>
-                            <li>2️⃣ Use <strong className="text-purple-400">Practice Mode</strong> to draft answers</li>
-                            <li>3️⃣ Review your history in your <strong className="text-cyan-400">Profile</strong></li>
-                            <li>4️⃣ Climb the <strong className="text-cyan-400">Leaderboard</strong> rankings</li>
-                            <li>5️⃣ Unlock <strong className="text-cyan-400">Achievements</strong> as you improve</li>
+                            <li>1️⃣ Play <strong className="text-cyan-400">Weekly Individual Games</strong> for points & AI feedback</li>
+                            <li>2️⃣ Join a <strong className="text-purple-400">Team</strong> to unlock bi-weekly team challenges</li>
+                            <li>3️⃣ Compete on <strong className="text-cyan-400">Three Leaderboards</strong> (Individual, Teams, Team Games)</li>
+                            <li>4️⃣ Use <strong className="text-purple-400">Practice Mode</strong> to refine your answers</li>
+                            <li>5️⃣ Track progress in your <strong className="text-cyan-400">Profile</strong> and earn achievements</li>
                         </ul>
                     </div>
 
