@@ -274,8 +274,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return sendError(res, 403, 'player_banned', 'Your account is banned. Contact an admin for help.');
     }
 
-    // Rate Limiting: Check last attempt timestamp
+    // Check if player already submitted for this game (1 attempt per game limit)
     const attempts = playerRow.progress?.attempts || [];
+    const existingAttempt = attempts.find(a => a.gameId === gameId);
+    if (existingAttempt) {
+      return sendError(
+        res,
+        409,
+        'already_submitted',
+        'You have already submitted for this game. Only one submission per game is allowed in Challenge mode.'
+      );
+    }
+
+    // Rate Limiting: Check last attempt timestamp
     if (attempts.length > 0) {
       const lastAttempt = attempts[attempts.length - 1];
       const lastAttemptTime = new Date(lastAttempt.ts).getTime();

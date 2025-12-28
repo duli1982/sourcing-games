@@ -126,6 +126,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(403).json({ error: 'You must be a team member to submit team game attempts' });
         }
 
+        // Check if team already submitted for this game (1 attempt per game limit)
+        const { data: existingTeamAttempt, error: checkError } = await supabase
+          .from('team_attempts')
+          .select('id')
+          .eq('team_id', teamId)
+          .eq('game_id', gameId)
+          .maybeSingle();
+
+        if (checkError && !isMissingTableError(checkError)) {
+          console.error('Failed to check existing team attempt:', checkError);
+          return res.status(500).json({ error: 'Failed to verify submission status' });
+        }
+
+        if (existingTeamAttempt) {
+          return res.status(409).json({
+            error: 'Your team has already submitted for this game. Only one submission per team per game is allowed.'
+          });
+        }
+
         // Insert the team attempt
         const { data: attemptRow, error: attemptError } = await supabase
           .from('team_attempts')
