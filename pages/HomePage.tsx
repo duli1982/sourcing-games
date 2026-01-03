@@ -1,14 +1,27 @@
 
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePlayerContext } from '../context/PlayerContext';
 import { useUIContext } from '../context/UIContext';
 import { Page } from '../types';
 
+const pageToPath: Record<Page, string> = {
+    home: '/',
+    games: '/games',
+    leaderboard: '/leaderboard',
+    teams: '/teams',
+    'team-games': '/team-games',
+    profile: '/profile',
+    admin: '/admin',
+};
+
 const HomePage: React.FC = () => {
     const { player } = usePlayerContext();
     const { setCurrentPage } = useUIContext();
+    const navigate = useNavigate();
 
     const handleNavigate = (page: Page) => {
+        navigate(pageToPath[page]);
         setCurrentPage(page);
     };
 

@@ -157,7 +157,7 @@ const PlayerProfilePage: React.FC = () => {
         {/* Achievements */}
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-white mb-4">Achievements</h2>
-          {player.achievements.length > 0 ? (
+          {player.achievements && player.achievements.length > 0 ? (
             <AchievementsPanel achievements={player.achievements} />
           ) : (
             <div className="bg-gray-800 rounded-lg p-8 text-center">
