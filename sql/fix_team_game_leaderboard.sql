@@ -9,42 +9,41 @@ RETURNS TABLE (
   total_score INTEGER,
   games_played INTEGER,
   rank INTEGER
-) AS $$
-BEGIN
-  RETURN QUERY
-  WITH team_best_scores AS (
-    -- Get best score for each team-game combination
-    SELECT
-      team_id,
-      game_id,
-      MAX(score) as best_score
-    FROM team_attempts
-    GROUP BY team_id, game_id
-  ),
-  team_totals AS (
-    -- Sum up best scores per team and count games played
-    SELECT
-      t.id as team_id,
-      t.name as team_name,
-      COALESCE(SUM(tbs.best_score), 0)::INTEGER as total_score,
-      COUNT(tbs.game_id)::INTEGER as games_played
-    FROM teams t
-    LEFT JOIN team_best_scores tbs ON t.id = tbs.team_id
-    WHERE t.is_active = TRUE
-    GROUP BY t.id, t.name
-  )
+)
+LANGUAGE sql
+AS $$
+WITH team_best_scores AS (
+  -- Get best score for each team-game combination
   SELECT
-    tt.team_id,
-    tt.team_name,
-    tt.total_score,
-    tt.games_played,
-    ROW_NUMBER() OVER (ORDER BY tt.total_score DESC, tt.games_played DESC)::INTEGER as rank
-  FROM team_totals tt
-  ORDER BY rank
-  LIMIT p_limit;
-END;
-$$ LANGUAGE plpgsql;
+    ta.team_id,
+    ta.game_id,
+    MAX(ta.score) as best_score
+  FROM team_attempts ta
+  GROUP BY ta.team_id, ta.game_id
+),
+team_totals AS (
+  -- Sum up best scores per team and count games played
+  SELECT
+    t.id as team_id,
+    t.name as team_name,
+    COALESCE(SUM(tbs.best_score), 0)::INTEGER as total_score,
+    COUNT(tbs.game_id)::INTEGER as games_played
+  FROM teams t
+  LEFT JOIN team_best_scores tbs ON t.id = tbs.team_id
+  WHERE t.is_active = TRUE
+  GROUP BY t.id, t.name
+)
+SELECT
+  tt.team_id,
+  tt.team_name,
+  tt.total_score,
+  tt.games_played,
+  ROW_NUMBER() OVER (ORDER BY tt.total_score DESC, tt.games_played DESC)::INTEGER as rank
+FROM team_totals tt
+ORDER BY rank
+LIMIT p_limit;
+$$;
 
 -- Test the function
 SELECT 'Function updated successfully!' as status;
-SELECT 'Test query: SELECT * FROM get_team_game_leaderboard(10);' as test;
+SELECT * FROM get_team_game_leaderboard(10);

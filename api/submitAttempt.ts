@@ -5,13 +5,14 @@ import { games } from './_lib/data/games.js';
 import { Attempt, Player } from '../types.js';
 import { checkNewAchievements } from './_lib/data/achievements.js';
 import { rubricByDifficulty } from '../utils/rubrics.js';
+import { computeServerValidation } from './_lib/computeValidation.js';
 import { getSessionTokenFromCookie } from './_lib/utils/cookieUtils.js';
 
 const GEMINI_MAX_OUTPUT_TOKENS = 500; // Increased from 120 for better detailed feedback
 const GEMINI_PROMPT_CHAR_LIMIT = 2800;
 const GEMINI_FALLBACK_MODEL = 'gemini-1.5-flash';
 const promptCache = new Map<string, string>();
-const SCORE_RECONCILIATION_THRESHOLD = 30; // If validation and AI scores differ by more than this, average them
+const SCORE_RECONCILIATION_THRESHOLD = 10; // If validation and AI scores differ by more than this, average them
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -209,7 +210,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Security: Read session token from httpOnly cookie instead of request body
     const sessionToken = getSessionTokenFromCookie(req);
 
-    const { gameId, submission, validation, skillLevel } = (req.body ?? {}) as {
+    const { gameId, submission, validation: clientValidation, skillLevel } = (req.body ?? {}) as {
       gameId?: string;
       submission?: string;
       validation?: any; // ValidationResult
@@ -239,6 +240,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!game) {
       return sendError(res, 404, 'game_not_found', 'That game is unavailable. Please refresh and try again.');
     }
+
+    // Server-side validation (do not trust client-provided validation for scoring fairness).
+    // We still accept client validation in the payload for debugging/back-compat, but we don't use it for scoring.
+    const validation = computeServerValidation(game, submission);
 
     // Initialize Supabase client once for all database operations
     const supabase = getSupabase();
@@ -564,8 +569,13 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
       }
     }
 
-    // IMPROVED: Scaled Embedding Similarity Bonus
-    // Rewards good solutions with graduated bonuses, not just near-perfect ones
+    // Prevent "perfect" scores unless automated validation is also perfect.
+    if (validation && !usedAutomatedOnly && score === 100 && validation.score < 100) {
+      score = 99;
+    }
+
+    // Similarity analysis (informational)
+    // Shows how close the submission is to the example solution; does not affect score.
     let similarityBonus = 0;
     if (game.exampleSolution && game.exampleSolution.trim().length > 0) {
       try {
@@ -610,11 +620,10 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
         }
 
         if (similarity >= 0.7) {
-          score = Math.min(100, score + similarityBonus);
 
           const similarityNotice = `
 <div style="background:#0f172a;padding:10px;border-radius:8px;border:1px solid ${bonusBorderColor};margin-bottom:10px;">
-  <p><strong>${bonusIcon} Similarity Analysis: ${similarityBonus > 0 ? `+${similarityBonus} points` : 'No bonus'}</strong></p>
+  <p><strong>${bonusIcon} Similarity Analysis</strong></p>
   <p>Your approach is <strong>${(similarity * 100).toFixed(1)}%</strong> semantically similar to the example solution.</p>
   <p style="margin-top:6px;">${bonusMessage}</p>
 </div>`;
