@@ -75,6 +75,7 @@ const mapPublicPlayer = (row: any): PublicPlayer | null => {
   };
 
   return {
+    id: row.id,
     name: row.name,
     score: row.score ?? 0,
     bio: row.bio,

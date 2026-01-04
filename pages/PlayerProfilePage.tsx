@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import type { PublicPlayer } from '../types';
+import type { Page, PublicPlayer } from '../types';
 import PublicProfileCard from '../components/PublicProfileCard';
 import ActivityTimeline from '../components/ActivityTimeline';
 import AchievementsPanel from '../components/AchievementsPanel';
+import ChallengeButton from '../components/ChallengeButton';
+import ChallengeModal from '../components/ChallengeModal';
 import { Spinner } from '../components/Spinner';
 import Header from '../components/Header';
 import { useUIContext } from '../context/UIContext';
-import type { Page } from '../types';
 
 /**
  * PlayerProfilePage - Public player profile view
@@ -21,6 +22,7 @@ const PlayerProfilePage: React.FC = () => {
   const [player, setPlayer] = useState<PublicPlayer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isChallengeOpen, setIsChallengeOpen] = useState(false);
 
   useEffect(() => {
     const fetchPlayerProfile = async () => {
@@ -34,7 +36,6 @@ const PlayerProfilePage: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        // Fetch from API
         const response = await fetch(`/api/player?name=${encodeURIComponent(playerName)}`);
 
         if (!response.ok) {
@@ -66,10 +67,19 @@ const PlayerProfilePage: React.FC = () => {
     fetchPlayerProfile();
   }, [playerName]);
 
-  // Handle navigation back to main app
   const handleNavigate = (page: Page) => {
     setCurrentPage(page);
     navigate('/');
+  };
+
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    setCurrentPage('leaderboard');
+    navigate('/leaderboard');
   };
 
   if (loading) {
@@ -118,15 +128,34 @@ const PlayerProfilePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header with navigation */}
       <Header onNavigate={handleNavigate} currentPage={currentPage} onOpenTutorial={() => {}} />
 
-      {/* Main Content */}
       <div className="max-w-6xl mx-auto px-4 py-8">
-        {/* Profile Header */}
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <button
+            onClick={handleBack}
+            className="text-cyan-400 hover:text-cyan-300 transition flex items-center gap-2"
+          >
+            ← Back
+          </button>
+
+          <ChallengeButton
+            playerName={player.name}
+            playerId={player.id}
+            onChallengeClick={() => setIsChallengeOpen(true)}
+            size="medium"
+          />
+        </div>
+
+        <ChallengeModal
+          isOpen={isChallengeOpen}
+          onClose={() => setIsChallengeOpen(false)}
+          challengedPlayerName={player.name}
+          challengedPlayerId={player.id}
+        />
+
         <PublicProfileCard player={player} />
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-gray-800 p-4 rounded-lg">
             <div className="text-gray-400 text-sm mb-1">Total Score</div>
@@ -136,25 +165,18 @@ const PlayerProfilePage: React.FC = () => {
           </div>
           <div className="bg-gray-800 p-4 rounded-lg">
             <div className="text-gray-400 text-sm mb-1">Games Played</div>
-            <div className="text-3xl font-bold text-white">
-              {player.stats.totalGamesPlayed}
-            </div>
+            <div className="text-3xl font-bold text-white">{player.stats.totalGamesPlayed}</div>
           </div>
           <div className="bg-gray-800 p-4 rounded-lg">
             <div className="text-gray-400 text-sm mb-1">Average Score</div>
-            <div className="text-3xl font-bold text-white">
-              {player.stats.averageScore}
-            </div>
+            <div className="text-3xl font-bold text-white">{player.stats.averageScore}</div>
           </div>
           <div className="bg-gray-800 p-4 rounded-lg">
             <div className="text-gray-400 text-sm mb-1">Best Score</div>
-            <div className="text-3xl font-bold text-green-400">
-              {player.stats.bestScore}
-            </div>
+            <div className="text-3xl font-bold text-green-400">{player.stats.bestScore}</div>
           </div>
         </div>
 
-        {/* Achievements */}
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-white mb-4">Achievements</h2>
           {player.achievements && player.achievements.length > 0 ? (
@@ -166,10 +188,7 @@ const PlayerProfilePage: React.FC = () => {
           )}
         </div>
 
-        {/* Activity Timeline */}
-        {player.stats.totalGamesPlayed > 0 && (
-          <ActivityTimeline stats={player.stats} />
-        )}
+        {player.stats.totalGamesPlayed > 0 && <ActivityTimeline stats={player.stats} />}
       </div>
     </div>
   );

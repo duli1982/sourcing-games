@@ -5,7 +5,15 @@ import { useUIContext } from '../context/UIContext';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid } from 'recharts';
 import PlayerDetailModal from '../components/PlayerDetailModal';
 import FlaggedCommentsTable from '../components/FlaggedCommentsTable';
-import { AdminAnalytics, AdminAttempt, AdminPlayer, AdminTeam, AdminTeamMember, GameOverride } from '../types';
+import { AdminAnalytics, AdminAttempt, AdminPlayer, AdminTeam, AdminTeamMember, GameOverride, TeamAttempt } from '../types';
+
+interface TeamGameLeaderboardEntry {
+  team_id: string;
+  team_name: string;
+  total_score: number;
+  games_played: number;
+  rank: number;
+}
 
 const AdminPage: React.FC = () => {
   const { addToast } = useUIContext();
@@ -19,7 +27,12 @@ const AdminPage: React.FC = () => {
   const [gameOverrides, setGameOverrides] = useState<GameOverride[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [teams, setTeams] = useState<AdminTeam[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'players' | 'attempts' | 'games' | 'teams' | 'flagged-comments'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'players' | 'attempts' | 'games' | 'teams' | 'team-games' | 'flagged-comments'>('overview');
+  const [teamGameLeaderboard, setTeamGameLeaderboard] = useState<TeamGameLeaderboardEntry[]>([]);
+  const [teamGameAttempts, setTeamGameAttempts] = useState<TeamAttempt[]>([]);
+  const [teamGamesTeamId, setTeamGamesTeamId] = useState<string>('');
+  const [isLoadingTeamGames, setIsLoadingTeamGames] = useState(false);
+  const [teamGamesError, setTeamGamesError] = useState<string | null>(null);
 
   // New feature states
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
@@ -158,6 +171,44 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const fetchTeamGamesData = async (opts?: { teamId?: string }) => {
+    if (!isAuthorized) return;
+
+    const selectedTeamId = opts?.teamId ?? teamGamesTeamId;
+    setIsLoadingTeamGames(true);
+    setTeamGamesError(null);
+
+    try {
+      const leaderboardRes = await fetch('/api/team-games?action=leaderboard&limit=50', { credentials: 'include' });
+      if (!leaderboardRes.ok) {
+        const body = await leaderboardRes.json().catch(() => ({}));
+        throw new Error(body?.error || `Failed to fetch team games leaderboard (HTTP ${leaderboardRes.status})`);
+      }
+      const leaderboardBody: TeamGameLeaderboardEntry[] = await leaderboardRes.json();
+      setTeamGameLeaderboard(leaderboardBody || []);
+
+      if (selectedTeamId) {
+        const attemptsRes = await fetch(`/api/team-games?action=attempts&teamId=${encodeURIComponent(selectedTeamId)}`, {
+          credentials: 'include',
+        });
+        if (!attemptsRes.ok) {
+          const body = await attemptsRes.json().catch(() => ({}));
+          throw new Error(body?.error || `Failed to fetch team game submissions (HTTP ${attemptsRes.status})`);
+        }
+        const attemptsBody: TeamAttempt[] = await attemptsRes.json();
+        setTeamGameAttempts(attemptsBody || []);
+      } else {
+        setTeamGameAttempts([]);
+      }
+    } catch (err) {
+      setTeamGamesError(err instanceof Error ? err.message : 'Failed to load team games');
+      setTeamGameLeaderboard([]);
+      setTeamGameAttempts([]);
+    } finally {
+      setIsLoadingTeamGames(false);
+    }
+  };
+
   const handleTeamAction = async (
     teamId: string,
     action: 'activate' | 'deactivate' | 'regenerate-invite' | 'remove-member',
@@ -269,6 +320,20 @@ const AdminPage: React.FC = () => {
       if (interval) clearInterval(interval);
     };
   }, [autoRefresh, isAuthorized]);
+
+  useEffect(() => {
+    if (!isAuthorized) return;
+    if (activeTab !== 'team-games') return;
+
+    if (!teamGamesTeamId && teams.length > 0) {
+      setTeamGamesTeamId(teams[0].id);
+      fetchTeamGamesData({ teamId: teams[0].id });
+      return;
+    }
+
+    fetchTeamGamesData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isAuthorized]);
 
 
 
@@ -682,6 +747,134 @@ const AdminPage: React.FC = () => {
     </div>
   );
 
+  const renderTeamGames = () => (
+    <div className="bg-gray-800 rounded-lg p-4">
+      {!isAuthorized && (
+        <div className="bg-yellow-900 bg-opacity-40 border border-yellow-600 text-yellow-100 p-4 rounded">
+          Enter an admin token and click "Login" to view team game activity. This tab is locked until you authenticate.
+        </div>
+      )}
+      {isAuthorized && (
+        <>
+          <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+            <div>
+              <h4 className="text-lg font-bold text-white">Team Games</h4>
+              <p className="text-xs text-gray-400">Leaderboard + per-team submissions (1 per team per game).</p>
+            </div>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <select
+                value={teamGamesTeamId}
+                onChange={async (e) => {
+                  const nextTeamId = e.target.value;
+                  setTeamGamesTeamId(nextTeamId);
+                  await fetchTeamGamesData({ teamId: nextTeamId });
+                }}
+                className="flex-1 md:w-72 bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-cyan-500 text-sm"
+              >
+                <option value="">Select a team…</option>
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="text-sm text-cyan-400 whitespace-nowrap"
+                onClick={() => fetchTeamGamesData()}
+                disabled={isLoadingTeamGames}
+              >
+                {isLoadingTeamGames ? 'Loading…' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+
+          {teamGamesError && (
+            <div className="bg-red-900 bg-opacity-40 border border-red-600 text-red-100 p-3 rounded mb-4 text-sm">
+              {teamGamesError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-gray-900 rounded-lg p-4 border border-gray-700 overflow-x-auto">
+              <div className="flex items-center justify-between mb-3">
+                <h5 className="text-white font-semibold">Team Games Leaderboard</h5>
+                <span className="text-xs text-gray-400">Top {teamGameLeaderboard.length || 0}</span>
+              </div>
+
+              {teamGameLeaderboard.length === 0 ? (
+                <p className="text-sm text-gray-400">No team game leaderboard data yet.</p>
+              ) : (
+                <table className="w-full text-left min-w-[520px]">
+                  <thead className="border-b border-gray-700">
+                    <tr>
+                      <th className="py-2 pr-4 text-xs text-gray-400">Rank</th>
+                      <th className="py-2 pr-4 text-xs text-gray-400">Team</th>
+                      <th className="py-2 pr-4 text-xs text-gray-400">Total</th>
+                      <th className="py-2 pr-4 text-xs text-gray-400">Games</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teamGameLeaderboard.map((row) => (
+                      <tr key={row.team_id} className="border-b border-gray-800 hover:bg-gray-800/40">
+                        <td className="py-2 pr-4 text-sm text-gray-200">{row.rank}</td>
+                        <td className="py-2 pr-4 text-sm">
+                          <button
+                            className="text-cyan-400 hover:text-cyan-300 hover:underline"
+                            onClick={async () => {
+                              setTeamGamesTeamId(row.team_id);
+                              await fetchTeamGamesData({ teamId: row.team_id });
+                            }}
+                          >
+                            {row.team_name}
+                          </button>
+                        </td>
+                        <td className="py-2 pr-4 text-sm text-gray-200">{row.total_score}</td>
+                        <td className="py-2 pr-4 text-sm text-gray-200">{row.games_played}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
+              <div className="flex items-center justify-between mb-3">
+                <h5 className="text-white font-semibold">Team Submissions</h5>
+                <span className="text-xs text-gray-400">{teamGameAttempts.length} attempts</span>
+              </div>
+
+              {!teamGamesTeamId ? (
+                <p className="text-sm text-gray-400">Select a team to view submissions.</p>
+              ) : teamGameAttempts.length === 0 ? (
+                <p className="text-sm text-gray-400">No submissions found for this team.</p>
+              ) : (
+                <div className="space-y-2">
+                  {teamGameAttempts.slice(0, 25).map((a) => (
+                    <div key={a.id ?? `${a.teamId}-${a.gameId}-${a.ts}`} className="bg-gray-800 rounded p-3">
+                      <div className="flex justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-white font-semibold truncate">{a.gameTitle}</p>
+                          <p className="text-xs text-gray-400">
+                            {new Date(a.ts).toLocaleString()} • by {a.submittedByName || 'Unknown'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-cyan-400 text-sm font-bold">{a.score}/100</p>
+                          <p className="text-xs text-gray-400">{a.gameId}</p>
+                        </div>
+                      </div>
+                      <p className="text-gray-300 text-sm mt-2 line-clamp-3">{a.submission}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -754,6 +947,7 @@ const AdminPage: React.FC = () => {
         <TabButton label="Submissions" active={activeTab === 'attempts'} onClick={() => setActiveTab('attempts')} disabled={!isAuthorized} />
         <TabButton label="Games" active={activeTab === 'games'} onClick={() => setActiveTab('games')} disabled={!isAuthorized} />
         <TabButton label="Teams" active={activeTab === 'teams'} onClick={() => setActiveTab('teams')} disabled={!isAuthorized} />
+        <TabButton label="Team Games" active={activeTab === 'team-games'} onClick={() => setActiveTab('team-games')} disabled={!isAuthorized} />
         <TabButton label="Flagged Comments" active={activeTab === 'flagged-comments'} onClick={() => setActiveTab('flagged-comments')} disabled={!isAuthorized} />
       </div>
 
@@ -762,6 +956,7 @@ const AdminPage: React.FC = () => {
       {activeTab === 'attempts' && renderAttempts()}
       {activeTab === 'games' && renderGames()}
       {activeTab === 'teams' && renderTeams()}
+      {activeTab === 'team-games' && renderTeamGames()}
       {activeTab === 'flagged-comments' && (
         <div className="bg-gray-800 rounded-lg p-4">
           <FlaggedCommentsTable />

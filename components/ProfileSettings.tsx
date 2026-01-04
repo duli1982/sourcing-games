@@ -134,12 +134,12 @@ const ProfileSettings: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-gray-300 mb-2">Twitter Profile</label>
+              <label className="block text-gray-300 mb-2">X Profile</label>
               <input
                 type="url"
                 value={twitter}
                 onChange={(e) => setTwitter(e.target.value)}
-                placeholder="https://twitter.com/yourhandle"
+                placeholder="https://x.com/yourprofile"
                 className="w-full bg-gray-700 text-white border border-gray-600 rounded-md p-3 focus:outline-none focus:border-cyan-500"
               />
             </div>

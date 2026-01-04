@@ -23,6 +23,7 @@ export interface Player {
 
 // Public profile data (excludes sensitive fields)
 export interface PublicPlayer {
+  id: string;
   name: string;
   score: number;
   bio?: string;

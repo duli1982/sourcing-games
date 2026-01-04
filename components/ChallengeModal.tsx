@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createChallenge } from '../services/supabaseService';
 import { useChallenges } from '../context/ChallengeContext';
-import gamesData from '../data/games.json';
+import { games } from '../data/games';
 
 interface ChallengeModalProps {
     isOpen: boolean;
@@ -38,7 +38,7 @@ const ChallengeModal: React.FC<ChallengeModalProps> = ({
         setError('');
 
         try {
-            const game = gamesData.games.find(g => g.id === selectedGame);
+            const game = games.find(g => g.id === selectedGame);
             if (!game) {
                 throw new Error('Game not found');
             }
@@ -124,9 +124,9 @@ const ChallengeModal: React.FC<ChallengeModalProps> = ({
                                 required
                             >
                                 <option value="">-- Choose a game --</option>
-                                {gamesData.games.map((game) => (
+                                {games.map((game) => (
                                     <option key={game.id} value={game.id}>
-                                        {game.title} ({game.skill})
+                                        {game.title} ({game.skillCategory})
                                     </option>
                                 ))}
                             </select>
