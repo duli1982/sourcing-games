@@ -259,6 +259,7 @@ const submitChallengeScoreIfNeeded = async (
   gameId: string,
   score: number
 ): Promise<void> => {
+  const supabaseAny = supabase as any;
   try {
     const nowIso = new Date().toISOString();
     const { data, error } = await supabase
@@ -288,9 +289,9 @@ const submitChallengeScoreIfNeeded = async (
       ? { challenger_score: score }
       : { challenged_score: score };
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAny
       .from('challenges')
-      .update(updateData as Record<string, number>)
+      .update(updateData)
       .eq('id', pending.id);
 
     if (updateError) {
@@ -1749,7 +1750,7 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
     const gamingRiskLevel = calculateGamingRiskLevel(integritySignals);
 
     // Log analytics in background (don't block response)
-    logScoringAnalytics(supabase, {
+    logScoringAnalytics(supabase as any, {
       attemptId: `${currentPlayer.id}_${game.id}_${Date.now()}`,
       playerId: currentPlayer.id,
       playerName: currentPlayer.name,

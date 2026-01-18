@@ -7,7 +7,7 @@
  * @version 1.0.0
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRealtimeFeedback, RealtimeValidationResult, RealtimeCheck, ContextualTip, QualitySignal } from '../hooks/useRealtimeFeedback';
 import { Game } from '../types';
 
@@ -16,6 +16,7 @@ interface RealtimeFeedbackPreviewProps {
   game: Game;
   isVisible?: boolean;
   compact?: boolean;
+  playerId?: string | null;
 }
 
 const RealtimeFeedbackPreview: React.FC<RealtimeFeedbackPreviewProps> = ({
@@ -23,10 +24,35 @@ const RealtimeFeedbackPreview: React.FC<RealtimeFeedbackPreviewProps> = ({
   game,
   isVisible = true,
   compact = false,
+  playerId = null,
 }) => {
   const feedback = useRealtimeFeedback(submission, game);
+  const [shouldShow, setShouldShow] = useState<boolean | null>(null);
+  const [showOnceNotice, setShowOnceNotice] = useState(false);
 
-  if (!isVisible || submission.length === 0) {
+  useEffect(() => {
+    if (!isVisible || submission.length === 0) return;
+    const storedPlayerId = playerId || window.localStorage.getItem('playerId');
+    const accountKey = storedPlayerId ? `player:${storedPlayerId}` : 'anonymous';
+    const storageKey = `realtimePreviewSeen:${accountKey}:${game.id}`;
+    try {
+      const seen = window.localStorage.getItem(storageKey);
+      if (seen) {
+        setShouldShow(false);
+        setShowOnceNotice(false);
+        return;
+      }
+      window.localStorage.setItem(storageKey, '1');
+      setShouldShow(true);
+      setShowOnceNotice(true);
+    } catch {
+      // If storage is unavailable, fall back to showing in-session only.
+      setShouldShow(true);
+      setShowOnceNotice(true);
+    }
+  }, [game.id, isVisible, playerId, submission.length]);
+
+  if (!isVisible || submission.length === 0 || shouldShow === false || shouldShow === null) {
     return null;
   }
 
@@ -34,7 +60,7 @@ const RealtimeFeedbackPreview: React.FC<RealtimeFeedbackPreviewProps> = ({
     return <CompactView feedback={feedback} />;
   }
 
-  return <FullView feedback={feedback} game={game} />;
+  return <FullView feedback={feedback} game={game} showOnceNotice={showOnceNotice} />;
 };
 
 // ============================================================================
@@ -85,7 +111,11 @@ const CompactView: React.FC<{ feedback: RealtimeValidationResult }> = ({ feedbac
 // Full View - Shows detailed feedback panel
 // ============================================================================
 
-const FullView: React.FC<{ feedback: RealtimeValidationResult; game: Game }> = ({ feedback, game }) => {
+const FullView: React.FC<{
+  feedback: RealtimeValidationResult;
+  game: Game;
+  showOnceNotice: boolean;
+}> = ({ feedback, game, showOnceNotice }) => {
   const showBooleanSection = game.skillCategory === 'boolean' || game.skillCategory === 'xray';
   const showOutreachSection = game.skillCategory === 'outreach';
 
@@ -111,6 +141,11 @@ const FullView: React.FC<{ feedback: RealtimeValidationResult; game: Game }> = (
 
       {/* Main content */}
       <div className="p-4 space-y-4">
+        {showOnceNotice && (
+          <div className="text-xs text-gray-400 bg-gray-800/60 border border-gray-700 rounded-md px-3 py-2">
+            One-time assist: this real-time preview appears only once, then it disappears.
+          </div>
+        )}
         {/* Quality Signals Row */}
         <div className="flex flex-wrap gap-2">
           {feedback.qualitySignals.map(signal => (

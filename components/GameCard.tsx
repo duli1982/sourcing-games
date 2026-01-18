@@ -818,6 +818,7 @@ const GameCard: React.FC<GameCardProps> = ({ game, mode = 'challenge' }) => {
                         game={game}
                         isVisible={submission.length > 0}
                         compact={false}
+                        playerId={player?.id ?? null}
                     />
                 )}
 
