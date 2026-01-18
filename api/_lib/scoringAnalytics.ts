@@ -577,3 +577,198 @@ export function calculateGamingRiskLevel(
 export function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(word => word.length > 0).length;
 }
+
+// ============================================================================
+// Score Variance Tracking - NEW: Identify games with inconsistent AI scoring
+// ============================================================================
+
+export interface ScoreVarianceStats {
+  gameId: string;
+  gameTitle: string;
+  sampleCount: number;
+  aiScoreStdDev: number;
+  validationScoreStdDev: number;
+  aiValidationCorrelation: number;
+  varianceLevel: 'low' | 'medium' | 'high' | 'critical';
+  needsInvestigation: boolean;
+  investigationReason: string | null;
+}
+
+/**
+ * Get games with high score variance that may need rubric tuning
+ */
+export async function getGamesWithHighVariance(
+  supabase: SupabaseClient,
+  minSamples: number = 20
+): Promise<ScoreVarianceStats[]> {
+  try {
+    const { data, error } = await supabase
+      .from('scoring_analytics')
+      .select('game_id, game_title, ai_score, validation_score, final_score');
+
+    if (error || !data) {
+      console.error('[ScoringAnalytics] Error fetching variance data:', error);
+      return [];
+    }
+
+    // Group by game
+    const gameGroups = new Map<string, {
+      title: string;
+      aiScores: number[];
+      validationScores: number[];
+      finalScores: number[];
+    }>();
+
+    for (const row of data) {
+      if (!row.game_id) continue;
+
+      if (!gameGroups.has(row.game_id)) {
+        gameGroups.set(row.game_id, {
+          title: row.game_title || row.game_id,
+          aiScores: [],
+          validationScores: [],
+          finalScores: [],
+        });
+      }
+
+      const group = gameGroups.get(row.game_id)!;
+      if (row.ai_score != null) group.aiScores.push(row.ai_score);
+      if (row.validation_score != null) group.validationScores.push(row.validation_score);
+      if (row.final_score != null) group.finalScores.push(row.final_score);
+    }
+
+    const results: ScoreVarianceStats[] = [];
+
+    for (const [gameId, group] of gameGroups) {
+      if (group.aiScores.length < minSamples) continue;
+
+      const aiStdDev = calculateStdDev(group.aiScores);
+      const validationStdDev = calculateStdDev(group.validationScores);
+      const correlation = calculateCorrelation(group.aiScores, group.validationScores);
+
+      // Determine variance level
+      let varianceLevel: 'low' | 'medium' | 'high' | 'critical' = 'low';
+      let needsInvestigation = false;
+      let investigationReason: string | null = null;
+
+      if (aiStdDev > 25) {
+        varianceLevel = 'critical';
+        needsInvestigation = true;
+        investigationReason = `Very high AI score variance (${aiStdDev.toFixed(1)} std dev)`;
+      } else if (aiStdDev > 18) {
+        varianceLevel = 'high';
+        needsInvestigation = true;
+        investigationReason = `High AI score variance (${aiStdDev.toFixed(1)} std dev)`;
+      } else if (aiStdDev > 12) {
+        varianceLevel = 'medium';
+      }
+
+      // Also flag if AI and validation scores don't correlate well
+      if (correlation < 0.3 && group.validationScores.length >= minSamples) {
+        needsInvestigation = true;
+        investigationReason = investigationReason
+          ? `${investigationReason}; Low AI-validation correlation (${correlation.toFixed(2)})`
+          : `Low AI-validation correlation (${correlation.toFixed(2)}) - scoring methods disagree`;
+      }
+
+      results.push({
+        gameId,
+        gameTitle: group.title,
+        sampleCount: group.aiScores.length,
+        aiScoreStdDev: Math.round(aiStdDev * 10) / 10,
+        validationScoreStdDev: Math.round(validationStdDev * 10) / 10,
+        aiValidationCorrelation: Math.round(correlation * 100) / 100,
+        varianceLevel,
+        needsInvestigation,
+        investigationReason,
+      });
+    }
+
+    // Sort by variance level (critical first) then by std dev
+    const levelOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    results.sort((a, b) => {
+      const levelDiff = levelOrder[a.varianceLevel] - levelOrder[b.varianceLevel];
+      if (levelDiff !== 0) return levelDiff;
+      return b.aiScoreStdDev - a.aiScoreStdDev;
+    });
+
+    return results;
+  } catch (err) {
+    console.error('[ScoringAnalytics] Exception calculating variance:', err);
+    return [];
+  }
+}
+
+/**
+ * Calculate standard deviation of an array
+ */
+function calculateStdDev(values: number[]): number {
+  if (values.length === 0) return 0;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const squaredDiffs = values.map(v => Math.pow(v - mean, 2));
+  return Math.sqrt(squaredDiffs.reduce((a, b) => a + b, 0) / values.length);
+}
+
+/**
+ * Calculate Pearson correlation between two arrays
+ */
+function calculateCorrelation(x: number[], y: number[]): number {
+  const n = Math.min(x.length, y.length);
+  if (n < 2) return 0;
+
+  const xSlice = x.slice(0, n);
+  const ySlice = y.slice(0, n);
+
+  const xMean = xSlice.reduce((a, b) => a + b, 0) / n;
+  const yMean = ySlice.reduce((a, b) => a + b, 0) / n;
+
+  let numerator = 0;
+  let xDenom = 0;
+  let yDenom = 0;
+
+  for (let i = 0; i < n; i++) {
+    const xDiff = xSlice[i] - xMean;
+    const yDiff = ySlice[i] - yMean;
+    numerator += xDiff * yDiff;
+    xDenom += xDiff * xDiff;
+    yDenom += yDiff * yDiff;
+  }
+
+  const denominator = Math.sqrt(xDenom) * Math.sqrt(yDenom);
+  return denominator === 0 ? 0 : numerator / denominator;
+}
+
+/**
+ * Get variance summary for dashboard display
+ */
+export async function getVarianceSummary(
+  supabase: SupabaseClient
+): Promise<{
+  gamesWithHighVariance: number;
+  gamesNeedingInvestigation: number;
+  avgAiStdDev: number;
+  avgCorrelation: number;
+}> {
+  const varianceStats = await getGamesWithHighVariance(supabase, 10);
+
+  const highVarianceCount = varianceStats.filter(s =>
+    s.varianceLevel === 'high' || s.varianceLevel === 'critical'
+  ).length;
+
+  const investigationCount = varianceStats.filter(s => s.needsInvestigation).length;
+
+  const avgAiStdDev = varianceStats.length > 0
+    ? varianceStats.reduce((sum, s) => sum + s.aiScoreStdDev, 0) / varianceStats.length
+    : 0;
+
+  const avgCorrelation = varianceStats.length > 0
+    ? varianceStats.reduce((sum, s) => sum + s.aiValidationCorrelation, 0) / varianceStats.length
+    : 0;
+
+  return {
+    gamesWithHighVariance: highVarianceCount,
+    gamesNeedingInvestigation: investigationCount,
+    avgAiStdDev: Math.round(avgAiStdDev * 10) / 10,
+    avgCorrelation: Math.round(avgCorrelation * 100) / 100,
+  };
+}

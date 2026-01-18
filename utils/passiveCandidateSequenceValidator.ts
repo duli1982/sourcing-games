@@ -23,50 +23,125 @@ export function validatePassiveCandidateSequence(
     const checks: Record<string, boolean> = {
         hasMultipleTouches: false,
         includesTiming: false,
+        hasOptimalTiming: false,
         hasContentProgression: false,
         includesValueAdd: false,
         avoidsRepetition: false,
         hasRelationshipBuilding: false,
+        hasChannelEscalation: false,
     };
 
     // ===== 1. MULTI-TOUCH SEQUENCE DETECTION =====
-    // Check if submission describes multiple touchpoints/emails
+    // Check if submission describes multiple touchpoints/emails with explicit counting
 
-    const sequenceIndicators = [
-        /\b(email|touch|message|outreach)\s*[#]?[12345]|\b(first|second|third|fourth|fifth)\s+(email|touch|message|outreach)/gi,
-        /\b(step|phase|stage)\s*[12345]|\b(day|week)\s*[0-9]+/gi,
+    // Explicit numbered touch patterns
+    const numberedTouchPatterns = [
+        // "Email 1", "Email #1", "Touch 1", "Message 1"
+        /\b(email|touch|message|outreach)\s*[#]?\s*([1-9])/gi,
+        // "1st email", "2nd touch", "3rd message"
+        /\b([1-9])(st|nd|rd|th)\s+(email|touch|message|outreach)/gi,
+        // "First email", "Second touch", etc.
+        /\b(first|second|third|fourth|fifth|sixth|seventh)\s+(email|touch|message|outreach|contact)/gi,
+        // "Day 1:", "Day 3:", "Day 7:" format
+        /\bday\s*([0-9]+)\s*[:\-]/gi,
+        // "Step 1", "Step 2", "Phase 1"
+        /\b(step|phase|stage)\s*[#]?\s*([1-9])/gi,
+    ];
+
+    // Count distinct touch numbers explicitly mentioned
+    const explicitTouchNumbers = new Set<number>();
+    const touchLabels: string[] = [];
+
+    // Check for numbered patterns (Email 1, Email 2, etc.)
+    const emailTouchMatches = submission.matchAll(/\b(email|touch|message|outreach)\s*[#]?\s*([1-9])/gi);
+    for (const match of emailTouchMatches) {
+        const num = parseInt(match[2], 10);
+        explicitTouchNumbers.add(num);
+        touchLabels.push(`${match[1]} ${num}`);
+    }
+
+    // Check for ordinal patterns (first email, second touch, etc.)
+    const ordinalMap: Record<string, number> = {
+        'first': 1, 'second': 2, 'third': 3, 'fourth': 4,
+        'fifth': 5, 'sixth': 6, 'seventh': 7
+    };
+    const ordinalMatches = submission.matchAll(/\b(first|second|third|fourth|fifth|sixth|seventh)\s+(email|touch|message|outreach|contact)/gi);
+    for (const match of ordinalMatches) {
+        const num = ordinalMap[match[1].toLowerCase()];
+        if (num) {
+            explicitTouchNumbers.add(num);
+            touchLabels.push(`${match[1]} ${match[2]}`);
+        }
+    }
+
+    // Check for day-based sequences (Day 1, Day 3, Day 7)
+    const dayMatches = submission.matchAll(/\bday\s*([0-9]+)\s*[:\-]/gi);
+    const dayNumbers: number[] = [];
+    for (const match of dayMatches) {
+        dayNumbers.push(parseInt(match[1], 10));
+    }
+    // Each unique day represents a touch
+    if (dayNumbers.length > 0) {
+        const uniqueDays = new Set(dayNumbers);
+        uniqueDays.forEach((_, idx) => explicitTouchNumbers.add(idx + 1));
+    }
+
+    // Check for step/phase patterns
+    const stepMatches = submission.matchAll(/\b(step|phase|stage)\s*[#]?\s*([1-9])/gi);
+    for (const match of stepMatches) {
+        const num = parseInt(match[2], 10);
+        explicitTouchNumbers.add(num);
+        touchLabels.push(`${match[1]} ${num}`);
+    }
+
+    // Fallback: check for general sequence indicators
+    const generalSequenceIndicators = [
         /\b(initial|follow.?up|final|last)\s+(email|message|touch|outreach)/gi,
         /\b(sequence|cadence|campaign|series|drip)/gi,
     ];
 
-    const touchMatches = sequenceIndicators.map(pattern =>
-        Array.from(submission.matchAll(pattern))
-    ).flat();
+    const hasGeneralSequence = generalSequenceIndicators.some(p => p.test(submission));
 
-    const touchCount = new Set(
-        touchMatches.map(m => m[0].toLowerCase())
-    ).size;
+    // Calculate touch count
+    let touchCount = explicitTouchNumbers.size;
+    if (touchCount === 0 && hasGeneralSequence) {
+        // If no explicit numbers but mentions sequence concepts, assume at least 2
+        touchCount = 2;
+    }
 
-    if (touchCount >= 3) {
+    // Validate touch sequence
+    if (touchCount >= 4) {
         checks.hasMultipleTouches = true;
-        score += 10; // Bonus for multi-touch thinking
-        strengths.push(`Multi-touch sequence (${touchCount} touchpoints) - understands passive candidate engagement requires patience`);
+        score += 15; // Strong bonus for comprehensive sequence
+        strengths.push(`Comprehensive ${touchCount}-touch sequence explicitly defined - excellent passive candidate approach`);
+    } else if (touchCount === 3) {
+        checks.hasMultipleTouches = true;
+        score += 10;
+        strengths.push(`3-touch sequence defined - solid multi-touch approach for passive candidates`);
     } else if (touchCount === 2) {
         checks.hasMultipleTouches = true;
-        strengths.push('Includes follow-up strategy (2 touchpoints) - but passive candidates need 3-5 touches');
+        strengths.push('Includes follow-up (2 touchpoints) - passive candidates typically need 3-5 touches for engagement');
+        score -= 5;
     } else {
-        feedback.push('❌ SINGLE-TOUCH APPROACH: Passive candidates need 3-5 touchpoints. Add: initial outreach → value-add follow-up → final check-in.');
+        feedback.push('❌ SINGLE-TOUCH APPROACH: Passive candidates need 3-5 explicitly defined touchpoints. Structure as: Email 1 (Day 0), Email 2 (Day 5), Email 3 (Day 12), etc.');
         score -= 30;
     }
 
+    // Bonus for explicit labeling
+    if (touchLabels.length >= 3) {
+        strengths.push(`Clear touch labeling (${touchLabels.slice(0, 3).join(', ')}${touchLabels.length > 3 ? '...' : ''}) - easy to follow and implement`);
+        score += 5;
+    }
+
     // ===== 2. TIMING/CADENCE VALIDATION =====
-    // Check if submission includes timing between touches
+    // Check if submission includes timing between touches with 3-7 day optimal range
 
     const timingPatterns = [
         /\b(day|week|month)\s*[0-9]+/gi,
-        /\b(after|wait|then)\s+([0-9]+)?\s*(day|week)/gi,
-        /\b([0-9]+)\s*(day|week)s?\s+(later|after)/gi,
+        /\b(after|wait|then)\s+([0-9]+)?\s*(day|week|hour)/gi,
+        /\b([0-9]+)\s*(day|week)s?\s+(later|after|between|apart)/gi,
         /\b(immediate|within|next)\s+(day|week)/gi,
+        /\b([0-9]+)\s*[-–]\s*([0-9]+)\s*(day|week)s?\b/gi, // "3-5 days", "5-7 days"
     ];
 
     const hasTimingMentions = timingPatterns.some(p => p.test(submission));
@@ -74,28 +149,61 @@ export function validatePassiveCandidateSequence(
     if (hasTimingMentions) {
         checks.includesTiming = true;
 
-        // Check for realistic timing (3-7 days between touches is ideal)
-        const dayMatches = Array.from(submission.matchAll(/([0-9]+)\s*day/gi));
-        const weekMatches = Array.from(submission.matchAll(/([0-9]+)\s*week/gi));
+        // Extract all day intervals mentioned
+        const dayIntervalMatches = Array.from(submission.matchAll(/([0-9]+)\s*day/gi));
+        const weekIntervalMatches = Array.from(submission.matchAll(/([0-9]+)\s*week/gi));
+        const rangeMatches = Array.from(submission.matchAll(/([0-9]+)\s*[-–]\s*([0-9]+)\s*(day|week)s?\b/gi));
 
-        const days = dayMatches.map(m => parseInt(m[1], 10));
-        const weeks = weekMatches.map(m => parseInt(m[1], 10) * 7);
-        const allDays = [...days, ...weeks];
+        const days = dayIntervalMatches.map(m => parseInt(m[1], 10));
+        const weeks = weekIntervalMatches.map(m => parseInt(m[1], 10) * 7);
 
-        const hasRealisticCadence = allDays.some(d => d >= 3 && d <= 10);
+        // Handle ranges like "3-5 days" or "5-7 days"
+        const rangeDays: number[] = [];
+        for (const match of rangeMatches) {
+            const low = parseInt(match[1], 10);
+            const high = parseInt(match[2], 10);
+            const multiplier = match[3].toLowerCase().startsWith('week') ? 7 : 1;
+            rangeDays.push(low * multiplier, high * multiplier);
+        }
 
-        if (hasRealisticCadence) {
-            strengths.push('Realistic cadence (3-10 days between touches) - balances persistence with respect');
-            score += 5;
-        } else if (allDays.some(d => d < 3)) {
-            feedback.push('⚠️ CADENCE TOO AGGRESSIVE: Less than 3 days between touches feels pushy. Best practice: 5-7 days for passive candidates.');
-            score -= 10;
+        const allDays = [...days, ...weeks, ...rangeDays].filter(d => d > 0 && d < 60);
+
+        // Optimal timing: 3-7 days between touches
+        const optimalDays = allDays.filter(d => d >= 3 && d <= 7);
+        const goodDays = allDays.filter(d => d >= 3 && d <= 10);
+        const tooFastDays = allDays.filter(d => d > 0 && d < 3);
+        const tooSlowDays = allDays.filter(d => d > 14);
+
+        if (optimalDays.length >= 2) {
+            checks.hasOptimalTiming = true;
+            strengths.push(`Optimal cadence (3-7 days between touches) - perfect balance of persistence and respect`);
+            score += 12;
+        } else if (optimalDays.length >= 1 || goodDays.length >= 2) {
+            checks.hasOptimalTiming = true;
+            strengths.push('Good cadence timing - within recommended 3-10 day range');
+            score += 6;
+        } else if (tooFastDays.length > 0 && goodDays.length === 0) {
+            feedback.push(`⚠️ CADENCE TOO AGGRESSIVE: ${tooFastDays.join(', ')} day intervals feel pushy. Optimal: 3-7 days between touches for passive candidates.`);
+            score -= 12;
+        } else if (tooSlowDays.length > 0 && goodDays.length === 0) {
+            feedback.push(`⚠️ CADENCE TOO SLOW: ${tooSlowDays.join(', ')}+ day gaps lose momentum. Optimal: 3-7 days keeps you top of mind without being pushy.`);
+            score -= 8;
         } else {
-            strengths.push('Includes timing strategy - consider 5-7 day cadence for passive candidates');
+            strengths.push('Includes timing mentions - aim for 3-7 days between touches for optimal response rates');
+        }
+
+        // Specific validation for common timing patterns
+        const has3to7Pattern = /\b(3|4|5|6|7)\s*[-–]?\s*(day|days)\b/i.test(submission) ||
+                               /\b(3|4|5|6|7)\s*[-–]\s*(5|6|7|8|9|10)\s*days?\b/i.test(submission);
+
+        if (has3to7Pattern && !checks.hasOptimalTiming) {
+            checks.hasOptimalTiming = true;
+            strengths.push('Uses 3-7 day cadence - research shows this is optimal for passive candidate response rates');
+            score += 5;
         }
     } else {
-        feedback.push('⏰ NO TIMING/CADENCE: Specify when each touch happens (e.g., "Day 0: initial, Day 5: follow-up, Day 12: final check-in").');
-        score -= 15;
+        feedback.push('⏰ NO TIMING/CADENCE: Specify intervals between touches. Optimal: 3-7 days. Example: "Email 1 (Day 0) → Email 2 (Day 5) → Email 3 (Day 12)"');
+        score -= 18;
     }
 
     // ===== 3. CONTENT PROGRESSION =====
@@ -217,7 +325,98 @@ export function validatePassiveCandidateSequence(
         score -= 12;
     }
 
-    // ===== 7. SEQUENCE BEST PRACTICES =====
+    // ===== 7. CHANNEL ESCALATION STRATEGY =====
+    // Check for multi-channel approach with escalation (InMail → Email → LinkedIn message → Phone)
+
+    const channelPatterns = {
+        inmail: /\b(inmail|in-mail|in mail|linkedin message|li message)\b/gi,
+        email: /\b(email|e-mail|mail|gmail|outlook)\b/gi,
+        linkedin: /\b(linkedin|li connect|connection request|connect on li)\b/gi,
+        phone: /\b(phone|call|voicemail|vm|cold call)\b/gi,
+        sms: /\b(sms|text|text message)\b/gi,
+        social: /\b(twitter|x\.com|github|stackoverflow|reddit)\b/gi,
+    };
+
+    const channelsUsed: string[] = [];
+    const channelOrder: { channel: string; position: number }[] = [];
+
+    Object.entries(channelPatterns).forEach(([channel, pattern]) => {
+        const match = submission.match(pattern);
+        if (match) {
+            channelsUsed.push(channel);
+            // Find position in submission to determine order
+            const pos = submission.toLowerCase().indexOf(match[0].toLowerCase());
+            channelOrder.push({ channel, position: pos });
+        }
+    });
+
+    // Sort by position to get escalation order
+    channelOrder.sort((a, b) => a.position - b.position);
+    const escalationSequence = channelOrder.map(c => c.channel);
+
+    // Check for multi-channel approach
+    if (channelsUsed.length >= 3) {
+        checks.hasChannelEscalation = true;
+        score += 12;
+        strengths.push(`Multi-channel escalation (${escalationSequence.join(' → ')}) - maximizes touchpoints without being repetitive on one channel`);
+    } else if (channelsUsed.length === 2) {
+        checks.hasChannelEscalation = true;
+        score += 6;
+        strengths.push(`Uses ${channelsUsed.length} channels (${escalationSequence.join(' → ')}) - consider adding a third channel for better reach`);
+    } else if (channelsUsed.length === 1) {
+        feedback.push(`📱 SINGLE CHANNEL (${channelsUsed[0]}): Passive candidates respond better to multi-channel sequences. Try: InMail (Day 0) → Email (Day 5) → LinkedIn comment (Day 10)`);
+        score -= 10;
+    } else {
+        feedback.push('📱 NO CHANNEL STRATEGY: Specify which channels you\'ll use. Best practice: Start with InMail/Email, escalate to LinkedIn engagement, then phone.');
+        score -= 8;
+    }
+
+    // Check for smart escalation patterns
+    const smartEscalationPatterns = [
+        // InMail first, then email
+        { pattern: /\b(inmail|linkedin).*(then|followed by|after).*(email|e-mail)/gi, name: 'InMail → Email escalation' },
+        // If no response, try different channel
+        { pattern: /\b(no response|no reply|didn't hear).*(try|switch|move to|reach out via)/gi, name: 'Response-based channel switching' },
+        // Multi-channel mention
+        { pattern: /\b(multi.?channel|omni.?channel|cross.?channel|different channel)/gi, name: 'Multi-channel awareness' },
+        // Escalation to phone
+        { pattern: /\b(escalate|last resort|finally|if all else).*(phone|call)/gi, name: 'Phone as final escalation' },
+    ];
+
+    let escalationBonus = 0;
+    smartEscalationPatterns.forEach(ep => {
+        if (ep.pattern.test(submission)) {
+            escalationBonus += 4;
+            strengths.push(`Smart escalation: ${ep.name}`);
+        }
+    });
+
+    if (escalationBonus > 0) {
+        score += Math.min(escalationBonus, 12); // Cap bonus at 12
+    }
+
+    // Warn about common channel mistakes
+    const channelMistakes = [
+        {
+            pattern: /\b(phone|call)\s*(first|initially|start)/gi,
+            message: 'Starting with phone can be off-putting for passive candidates - warm them up with email/InMail first',
+            penalty: 6,
+        },
+        {
+            pattern: /\b(same|only|just)\s*(channel|email|inmail)/gi,
+            message: 'Sticking to one channel limits reach - passive candidates have channel preferences',
+            penalty: 5,
+        },
+    ];
+
+    channelMistakes.forEach(mistake => {
+        if (mistake.pattern.test(submission)) {
+            feedback.push(`⚠️ ${mistake.message}`);
+            score -= mistake.penalty;
+        }
+    });
+
+    // ===== 8. SEQUENCE BEST PRACTICES =====
 
     const bestPractices = [
         // Personalization in each touch
@@ -272,33 +471,39 @@ export function validatePassiveCandidateSequence(
         score += 5;
     }
 
-    // ===== 9. OVERALL SEQUENCE QUALITY =====
+    // ===== 10. OVERALL SEQUENCE QUALITY =====
 
     const sequenceScore = Object.values(checks).filter(Boolean).length;
 
-    if (sequenceScore >= 5) {
-        strengths.push('✅ STRONG PASSIVE CANDIDATE SEQUENCE: Multi-touch, value-driven, relationship-focused approach');
+    if (sequenceScore >= 7) {
+        strengths.push('✅ EXCELLENT PASSIVE CANDIDATE SEQUENCE: Multi-touch, multi-channel, value-driven, relationship-focused approach with optimal timing');
+    } else if (sequenceScore >= 5) {
+        strengths.push('✅ STRONG SEQUENCE: Comprehensive approach covering multiple key elements');
     } else if (sequenceScore >= 3) {
-        strengths.push('✓ DECENT SEQUENCE: Has multiple touches but could add more value-add content');
+        strengths.push('✓ DECENT SEQUENCE: Has core elements but could add channel escalation or optimal timing');
     } else {
-        feedback.push('⚠️ WEAK SEQUENCE: Missing key elements of passive candidate engagement (multi-touch, timing, value-add, relationship)');
+        feedback.push('⚠️ WEAK SEQUENCE: Missing key elements of passive candidate engagement (multi-touch, timing, channels, value-add)');
         score -= 15;
     }
 
     // Add comprehensive guidance
-    if (!checks.hasMultipleTouches || !checks.includesValueAdd || !checks.includesTiming) {
+    if (!checks.hasMultipleTouches || !checks.includesValueAdd || !checks.includesTiming || !checks.hasChannelEscalation) {
         feedback.push('\n💡 PASSIVE CANDIDATE SEQUENCE CHECKLIST:\n' +
-            `  ${checks.hasMultipleTouches ? '✓' : '✗'} Multi-touch sequence (3-5 touchpoints, not single outreach)\n` +
-            `  ${checks.includesTiming ? '✓' : '✗'} Realistic cadence (5-7 days between touches)\n` +
+            `  ${checks.hasMultipleTouches ? '✓' : '✗'} Multi-touch sequence (3-5 explicitly numbered touchpoints)\n` +
+            `  ${checks.includesTiming ? '✓' : '✗'} Timing specified (intervals between touches)\n` +
+            `  ${checks.hasOptimalTiming ? '✓' : '✗'} Optimal cadence (3-7 days between touches)\n` +
+            `  ${checks.hasChannelEscalation ? '✓' : '✗'} Channel escalation (InMail → Email → LinkedIn → Phone)\n` +
             `  ${checks.hasContentProgression ? '✓' : '✗'} Content progression (intro → value-add → closing)\n` +
             `  ${checks.includesValueAdd ? '✓' : '✗'} Value-add content (articles, insights, not "checking in")\n` +
             `  ${checks.avoidsRepetition ? '✓' : '✗'} Avoids repetition (each touch offers something new)\n` +
             `  ${checks.hasRelationshipBuilding ? '✓' : '✗'} Relationship building (genuine interest, personal connection)\n\n` +
-            '**IDEAL SEQUENCE:**\n' +
-            '  Touch 1 (Day 0): Personalized intro, reference their work, brief role pitch\n' +
-            '  Touch 2 (Day 5-7): Share relevant article/insight, no ask, just value\n' +
-            '  Touch 3 (Day 12-14): Brief check-in, offer coffee chat (low pressure)\n' +
-            '  Touch 4 (Day 21-25): Final touch, give them "out", keep door open for future'
+            '**IDEAL MULTI-CHANNEL SEQUENCE:**\n' +
+            '  Email 1 (Day 0): InMail - Personalized intro, reference their work, brief role pitch\n' +
+            '  Email 2 (Day 5): Email - Share relevant article/insight, no ask, just value\n' +
+            '  Email 3 (Day 10): LinkedIn - Comment on their post or engage with content\n' +
+            '  Email 4 (Day 15): Email - Brief check-in, offer coffee chat (low pressure)\n' +
+            '  Email 5 (Day 22): Phone/VM - Final touch, give them "out", keep door open\n\n' +
+            '**OPTIMAL TIMING:** 3-7 days between touches maximizes response while showing respect'
         );
     }
 

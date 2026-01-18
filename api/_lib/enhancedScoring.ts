@@ -94,6 +94,9 @@ const standardDeviation = (values: number[]): number => {
 
 /**
  * Ensemble scoring - weighted combination of AI, validation, and embedding scores
+ *
+ * Supports confidence-adjusted weighting: when AI confidence is low, the AI weight
+ * can be reduced dynamically to rely more on validation and embedding scores.
  */
 export const calculateEnsembleScore = (
   aiScore: number,
@@ -104,15 +107,22 @@ export const calculateEnsembleScore = (
     validationWeight?: number;
     embeddingWeight?: number;
     hasExampleSolution?: boolean;
+    // NEW: Confidence-adjusted weight override from consistency module
+    adjustedAiWeight?: number;
+    confidenceAdjustmentReason?: string;
   } = {}
 ): EnsembleScoreResult => {
   // Default weights - AI is primary, validation secondary, embedding tertiary
+  // If adjustedAiWeight is provided (from consistency module), use it instead
+  const baseAiWeight = options.adjustedAiWeight ?? options.aiWeight ?? 0.55;
   const {
-    aiWeight = 0.55,
     validationWeight = 0.30,
     embeddingWeight = options.hasExampleSolution ? 0.15 : 0,
     hasExampleSolution = true,
   } = options;
+
+  // Use adjusted weight if provided, otherwise use base
+  const aiWeight = baseAiWeight;
 
   // Normalize weights if no example solution
   const totalWeight = aiWeight + validationWeight + (hasExampleSolution ? embeddingWeight : 0);
@@ -605,6 +615,14 @@ export interface EnhancedScoringInput {
   aiFeedback: string;
   embeddingSimilarity: number;
   playerSkillLevel: 'beginner' | 'intermediate' | 'expert';
+  // NEW: Consistency module parameters
+  consistencyParams?: {
+    adjustedAiWeight?: number;
+    confidenceLevel?: 'high' | 'medium' | 'low' | 'very_low';
+    consistencyFlags?: string[];
+    crossValidationAdjustment?: number;
+    consistencyFeedback?: string;
+  };
 }
 
 export interface EnhancedScoringResult {
@@ -625,6 +643,11 @@ export interface EnhancedScoringResult {
 
 /**
  * Main enhanced scoring function - combines all scoring signals
+ *
+ * Now supports consistency module integration for:
+ * - Confidence-adjusted AI weighting
+ * - Cross-model validation adjustments
+ * - Consistency feedback
  */
 export const calculateEnhancedScore = (
   input: EnhancedScoringInput
@@ -635,7 +658,8 @@ export const calculateEnhancedScore = (
     validation,
     aiScore,
     aiFeedback,
-    embeddingSimilarity
+    embeddingSimilarity,
+    consistencyParams,
   } = input;
 
   // 1. Check submission integrity
@@ -645,12 +669,23 @@ export const calculateEnhancedScore = (
     embeddingSimilarity
   );
 
-  // 2. Calculate ensemble score
+  // 2. Apply cross-validation adjustment if provided
+  let adjustedAiScore = aiScore;
+  if (consistencyParams?.crossValidationAdjustment) {
+    adjustedAiScore = aiScore + consistencyParams.crossValidationAdjustment;
+    adjustedAiScore = Math.max(0, Math.min(100, adjustedAiScore));
+  }
+
+  // 3. Calculate ensemble score with optional confidence-adjusted weighting
   const ensemble = calculateEnsembleScore(
-    aiScore,
+    adjustedAiScore,
     validation.score,
     embeddingSimilarity,
-    { hasExampleSolution: !!game.exampleSolution }
+    {
+      hasExampleSolution: !!game.exampleSolution,
+      // Use adjusted AI weight from consistency module if provided
+      adjustedAiWeight: consistencyParams?.adjustedAiWeight,
+    }
   );
 
   // 3. Apply integrity penalties if needed
@@ -674,7 +709,11 @@ export const calculateEnhancedScore = (
 
   // 5. Format combined feedback
   const ensembleFeedback = formatEnsembleScoreFeedback(ensemble, integrity);
-  const combinedFeedback = ensembleFeedback + aiFeedback;
+
+  // Include consistency feedback if provided
+  const consistencyFeedback = consistencyParams?.consistencyFeedback || '';
+
+  const combinedFeedback = consistencyFeedback + ensembleFeedback + aiFeedback;
 
   return {
     finalScore: Math.max(0, Math.min(100, adjustedScore)),

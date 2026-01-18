@@ -93,6 +93,92 @@ export interface DetectionContext {
     avgScore: number;
     recentScores: number[];
   };
+  // NEW: Context awareness parameters
+  gameContext?: GameWritingContext;
+  playerStyleProfile?: PlayerStyleProfile;
+}
+
+// ============================================================================
+// CONTEXT AWARENESS - Game-specific writing expectations
+// ============================================================================
+
+/**
+ * Defines expected writing style for different game types
+ */
+export interface GameWritingContext {
+  gameType: GameWritingType;
+  expectedFormality: 'casual' | 'professional' | 'formal' | 'technical';
+  expectedStructure: 'freeform' | 'structured' | 'template-like' | 'code-like';
+  tolerateAiPhrases: boolean;
+  tolerateFormalLanguage: boolean;
+  expectedMinLength: number;
+  expectedMaxLength: number;
+  allowedPatterns: string[]; // Regex patterns that are OK for this game type
+}
+
+export type GameWritingType =
+  | 'boolean_search'      // Technical, code-like queries
+  | 'outreach_email'      // Professional, personalized emails
+  | 'job_description'     // Formal, structured job postings
+  | 'candidate_note'      // Informal notes about candidates
+  | 'strategy_document'   // Formal strategy/planning docs
+  | 'screening_questions' // Professional, structured questions
+  | 'negotiation_script'  // Professional, persuasive language
+  | 'diversity_plan'      // Formal, professional DEI content
+  | 'sourcing_strategy'   // Professional planning document
+  | 'general';            // Default
+
+/**
+ * Player's historical writing style profile
+ */
+export interface PlayerStyleProfile {
+  playerId: string;
+  sampleCount: number;
+  avgWordCount: number;
+  avgSentenceLength: number;
+  avgFormalityScore: number;
+  vocabularyRichness: number; // Unique words / total words
+  punctuationStyle: {
+    usesExclamations: boolean;
+    usesEllipsis: boolean;
+    avgCommasPerSentence: number;
+  };
+  commonPhrases: string[]; // Phrases this player commonly uses
+  writingPatterns: {
+    startsWithGreeting: boolean;
+    endsWithSignoff: boolean;
+    usesListFormat: boolean;
+    usesBulletPoints: boolean;
+  };
+  lastUpdated: string;
+}
+
+/**
+ * Result of comparing submission to player's historical style
+ */
+export interface StyleComparisonResult {
+  isConsistentWithHistory: boolean;
+  deviationScore: number; // 0-100, higher = more different from usual style
+  deviations: string[];
+  confidenceLevel: 'high' | 'medium' | 'low'; // Based on sample count
+}
+
+/**
+ * Appeal/review queue entry
+ */
+export interface ReviewQueueEntry {
+  id?: string;
+  playerId: string;
+  gameId: string;
+  submissionId?: string;
+  submission: string;
+  detectionResult: GamingDetectionResult;
+  appealReason?: string;
+  status: 'pending' | 'approved' | 'rejected' | 'auto_resolved';
+  reviewedBy?: string;
+  reviewedAt?: string;
+  resolution?: string;
+  createdAt: string;
 }
 
 // ============================================================================
@@ -124,12 +210,12 @@ export const GAMING_CONFIG = {
     maxRepetitions: 5, // Same keyword more than 5 times
   },
 
-  // AI detection thresholds
+  // AI detection thresholds - UPDATED: Raised thresholds to reduce false positives
   aiDetection: {
-    phrasesForWarning: 3,
-    phrasesForCritical: 6,
-    minFormalityScore: 0.7, // Suspiciously formal
-    burstinessThreshold: 0.3, // Low variance in sentence length
+    phrasesForWarning: 4,    // Was 3 - now need more signals
+    phrasesForCritical: 8,   // Was 6 - need strong evidence
+    minFormalityScore: 0.8,  // Was 0.7 - higher bar for "too formal"
+    burstinessThreshold: 0.2, // Was 0.3 - stricter uniformity detection
   },
 
   // Template matching
@@ -146,51 +232,64 @@ export const GAMING_CONFIG = {
 };
 
 // Common AI phrases to detect
+// UPDATED: Reduced severity on formal but legitimate professional phrases
+// Only high-weight items are strong AI signals; formal transitions are now low-weight
 const AI_PHRASES = [
-  // Formal transitions
-  { phrase: 'in conclusion', weight: 0.3, confidence: 0.6 },
-  { phrase: 'furthermore', weight: 0.2, confidence: 0.5 },
-  { phrase: 'moreover', weight: 0.2, confidence: 0.5 },
-  { phrase: 'additionally', weight: 0.2, confidence: 0.5 },
-  { phrase: 'it is worth noting', weight: 0.3, confidence: 0.6 },
-  { phrase: 'it is important to note', weight: 0.3, confidence: 0.6 },
-  { phrase: 'it should be noted', weight: 0.3, confidence: 0.6 },
-  { phrase: 'firstly', weight: 0.2, confidence: 0.5 },
-  { phrase: 'secondly', weight: 0.2, confidence: 0.5 },
-  { phrase: 'thirdly', weight: 0.2, confidence: 0.5 },
-  { phrase: 'lastly', weight: 0.2, confidence: 0.5 },
+  // Formal transitions - REDUCED WEIGHT (common in professional writing)
+  { phrase: 'in conclusion', weight: 0.1, confidence: 0.3 },
+  { phrase: 'furthermore', weight: 0.1, confidence: 0.3 },
+  { phrase: 'moreover', weight: 0.1, confidence: 0.3 },
+  { phrase: 'additionally', weight: 0.1, confidence: 0.3 },
+  { phrase: 'firstly', weight: 0.1, confidence: 0.3 },
+  { phrase: 'secondly', weight: 0.1, confidence: 0.3 },
+  { phrase: 'thirdly', weight: 0.1, confidence: 0.3 },
+  { phrase: 'lastly', weight: 0.1, confidence: 0.3 },
 
-  // Hedging language
-  { phrase: 'may or may not', weight: 0.2, confidence: 0.5 },
-  { phrase: 'it could be argued', weight: 0.3, confidence: 0.6 },
-  { phrase: 'one might consider', weight: 0.3, confidence: 0.6 },
-  { phrase: 'it can be said', weight: 0.3, confidence: 0.6 },
+  // Meta-noting phrases - MODERATE (slightly more AI-like)
+  { phrase: 'it is worth noting', weight: 0.2, confidence: 0.4 },
+  { phrase: 'it is important to note', weight: 0.2, confidence: 0.4 },
+  { phrase: 'it should be noted', weight: 0.2, confidence: 0.4 },
 
-  // Generic acknowledgments (strong AI signals)
-  { phrase: 'great question', weight: 0.5, confidence: 0.7 },
-  { phrase: 'that\'s a great question', weight: 0.5, confidence: 0.7 },
-  { phrase: 'thank you for asking', weight: 0.4, confidence: 0.6 },
-  { phrase: 'excellent question', weight: 0.5, confidence: 0.7 },
+  // Hedging language - REDUCED (common in professional communication)
+  { phrase: 'may or may not', weight: 0.15, confidence: 0.4 },
+  { phrase: 'it could be argued', weight: 0.2, confidence: 0.4 },
+  { phrase: 'one might consider', weight: 0.2, confidence: 0.5 },
+  { phrase: 'it can be said', weight: 0.2, confidence: 0.4 },
 
-  // AI assistant phrasing
-  { phrase: 'i\'d be happy to', weight: 0.4, confidence: 0.7 },
-  { phrase: 'i hope this helps', weight: 0.5, confidence: 0.8 },
-  { phrase: 'feel free to', weight: 0.3, confidence: 0.5 },
-  { phrase: 'let me explain', weight: 0.3, confidence: 0.5 },
-  { phrase: 'here are some', weight: 0.2, confidence: 0.4 },
-  { phrase: 'here is a', weight: 0.2, confidence: 0.4 },
+  // Generic acknowledgments - STRONG AI signals (keep high weight)
+  { phrase: 'great question', weight: 0.5, confidence: 0.8 },
+  { phrase: 'that\'s a great question', weight: 0.6, confidence: 0.85 },
+  { phrase: 'thank you for asking', weight: 0.5, confidence: 0.8 },
+  { phrase: 'excellent question', weight: 0.5, confidence: 0.8 },
 
-  // Overly structured language
-  { phrase: 'there are several', weight: 0.2, confidence: 0.4 },
-  { phrase: 'key points include', weight: 0.3, confidence: 0.5 },
-  { phrase: 'important factors', weight: 0.2, confidence: 0.4 },
-  { phrase: 'crucial aspects', weight: 0.2, confidence: 0.4 },
+  // AI assistant phrasing - STRONG signals (keep high weight)
+  { phrase: 'i\'d be happy to', weight: 0.5, confidence: 0.85 },
+  { phrase: 'i hope this helps', weight: 0.6, confidence: 0.9 },
+  { phrase: 'feel free to ask', weight: 0.4, confidence: 0.7 },
+  { phrase: 'let me explain', weight: 0.2, confidence: 0.4 },
+  { phrase: 'here are some', weight: 0.15, confidence: 0.35 },
+  { phrase: 'here is a', weight: 0.1, confidence: 0.3 },
 
-  // Meta-commentary
-  { phrase: 'as mentioned earlier', weight: 0.2, confidence: 0.4 },
-  { phrase: 'as stated above', weight: 0.2, confidence: 0.4 },
-  { phrase: 'to summarize', weight: 0.3, confidence: 0.5 },
-  { phrase: 'in summary', weight: 0.3, confidence: 0.5 },
+  // Overly structured language - REDUCED (common in sourcing strategies)
+  { phrase: 'there are several', weight: 0.1, confidence: 0.3 },
+  { phrase: 'key points include', weight: 0.15, confidence: 0.4 },
+  { phrase: 'important factors', weight: 0.1, confidence: 0.3 },
+  { phrase: 'crucial aspects', weight: 0.1, confidence: 0.3 },
+
+  // Meta-commentary - REDUCED (common in professional writing)
+  { phrase: 'as mentioned earlier', weight: 0.1, confidence: 0.3 },
+  { phrase: 'as stated above', weight: 0.1, confidence: 0.3 },
+  { phrase: 'to summarize', weight: 0.15, confidence: 0.4 },
+  { phrase: 'in summary', weight: 0.15, confidence: 0.4 },
+
+  // NEW: Very strong AI signals (chatbot-like responses)
+  { phrase: 'certainly!', weight: 0.6, confidence: 0.85 },
+  { phrase: 'absolutely!', weight: 0.4, confidence: 0.6 },
+  { phrase: 'i understand your', weight: 0.5, confidence: 0.8 },
+  { phrase: 'as an ai', weight: 0.9, confidence: 0.99 },
+  { phrase: 'as a language model', weight: 0.9, confidence: 0.99 },
+  { phrase: 'i cannot provide', weight: 0.7, confidence: 0.9 },
+  { phrase: 'i\'m not able to', weight: 0.5, confidence: 0.75 },
 ];
 
 // Keywords by skill category for stuffing detection
@@ -223,6 +322,209 @@ const SKILL_KEYWORDS: Record<string, { primary: string[]; secondary: string[] }>
     primary: ['sourcing', 'recruiting', 'talent', 'candidate', 'hire'],
     secondary: ['search', 'pipeline', 'strategy', 'outreach'],
   },
+};
+
+// ============================================================================
+// GAME WRITING CONTEXT PROFILES
+// Defines expected writing styles for different game types
+// ============================================================================
+
+const GAME_WRITING_CONTEXTS: Record<SkillCategory | string, GameWritingContext> = {
+  // Boolean/X-Ray games - technical, code-like queries
+  boolean: {
+    gameType: 'boolean_search',
+    expectedFormality: 'technical',
+    expectedStructure: 'code-like',
+    tolerateAiPhrases: false, // AI phrases don't belong in boolean queries
+    tolerateFormalLanguage: false,
+    expectedMinLength: 10,
+    expectedMaxLength: 500,
+    allowedPatterns: [
+      'AND|OR|NOT', // Boolean operators
+      'site:|inurl:|filetype:|intitle:', // X-ray operators
+    ],
+  },
+  xray: {
+    gameType: 'boolean_search',
+    expectedFormality: 'technical',
+    expectedStructure: 'code-like',
+    tolerateAiPhrases: false,
+    tolerateFormalLanguage: false,
+    expectedMinLength: 15,
+    expectedMaxLength: 800,
+    allowedPatterns: [
+      'site:|inurl:|filetype:|intitle:',
+      '\\(.*\\)', // Parentheses grouping
+    ],
+  },
+
+  // Outreach games - professional, personalized emails
+  outreach: {
+    gameType: 'outreach_email',
+    expectedFormality: 'professional',
+    expectedStructure: 'structured',
+    tolerateAiPhrases: true, // Professional emails can sound formal
+    tolerateFormalLanguage: true,
+    expectedMinLength: 50,
+    expectedMaxLength: 1500,
+    allowedPatterns: [
+      '^(hi|hello|dear|good morning|good afternoon)',
+      '(best regards|sincerely|thanks|thank you|looking forward)',
+    ],
+  },
+
+  // Job description games - formal, structured
+  'job-description': {
+    gameType: 'job_description',
+    expectedFormality: 'formal',
+    expectedStructure: 'template-like',
+    tolerateAiPhrases: true, // JDs often sound formal
+    tolerateFormalLanguage: true,
+    expectedMinLength: 100,
+    expectedMaxLength: 3000,
+    allowedPatterns: [
+      '(requirements|qualifications|responsibilities|about the role)',
+      '(we are looking for|you will|ideal candidate)',
+    ],
+  },
+
+  // Screening/interview games - professional questions
+  screening: {
+    gameType: 'screening_questions',
+    expectedFormality: 'professional',
+    expectedStructure: 'structured',
+    tolerateAiPhrases: true,
+    tolerateFormalLanguage: true,
+    expectedMinLength: 30,
+    expectedMaxLength: 1000,
+    allowedPatterns: [
+      '\\?$', // Questions end with ?
+      '(tell me about|describe|explain|what|how|why)',
+    ],
+  },
+
+  // Negotiation games - professional, persuasive
+  negotiation: {
+    gameType: 'negotiation_script',
+    expectedFormality: 'professional',
+    expectedStructure: 'freeform',
+    tolerateAiPhrases: true,
+    tolerateFormalLanguage: true,
+    expectedMinLength: 50,
+    expectedMaxLength: 2000,
+    allowedPatterns: [
+      '(offer|compensation|salary|benefits|value)',
+      '(i understand|let me|consider|propose)',
+    ],
+  },
+
+  // Diversity/DEI games - formal, professional
+  diversity: {
+    gameType: 'diversity_plan',
+    expectedFormality: 'formal',
+    expectedStructure: 'structured',
+    tolerateAiPhrases: true,
+    tolerateFormalLanguage: true,
+    expectedMinLength: 75,
+    expectedMaxLength: 2500,
+    allowedPatterns: [
+      '(diversity|inclusion|equity|belonging|representation)',
+      '(underrepresented|bias|inclusive|equitable)',
+    ],
+  },
+
+  // Persona/candidate profile games - semi-formal notes
+  persona: {
+    gameType: 'candidate_note',
+    expectedFormality: 'professional',
+    expectedStructure: 'freeform',
+    tolerateAiPhrases: false, // Notes should be more natural
+    tolerateFormalLanguage: false,
+    expectedMinLength: 30,
+    expectedMaxLength: 1500,
+    allowedPatterns: [],
+  },
+
+  // ATS games - technical/professional
+  ats: {
+    gameType: 'strategy_document',
+    expectedFormality: 'professional',
+    expectedStructure: 'structured',
+    tolerateAiPhrases: true,
+    tolerateFormalLanguage: true,
+    expectedMinLength: 50,
+    expectedMaxLength: 2000,
+    allowedPatterns: [],
+  },
+
+  // LinkedIn games - professional networking
+  linkedin: {
+    gameType: 'outreach_email',
+    expectedFormality: 'professional',
+    expectedStructure: 'structured',
+    tolerateAiPhrases: true,
+    tolerateFormalLanguage: true,
+    expectedMinLength: 30,
+    expectedMaxLength: 1000,
+    allowedPatterns: [
+      '(connection|network|linkedin|inmail|profile)',
+    ],
+  },
+
+  // Talent intelligence - formal analysis
+  'talent-intelligence': {
+    gameType: 'strategy_document',
+    expectedFormality: 'formal',
+    expectedStructure: 'structured',
+    tolerateAiPhrases: true,
+    tolerateFormalLanguage: true,
+    expectedMinLength: 100,
+    expectedMaxLength: 3000,
+    allowedPatterns: [],
+  },
+
+  // AI prompting games - technical prompts
+  'ai-prompting': {
+    gameType: 'general',
+    expectedFormality: 'technical',
+    expectedStructure: 'freeform',
+    tolerateAiPhrases: true, // Prompts might include AI-like language
+    tolerateFormalLanguage: true,
+    expectedMinLength: 20,
+    expectedMaxLength: 2000,
+    allowedPatterns: [],
+  },
+
+  // Multi-platform games
+  multiplatform: {
+    gameType: 'sourcing_strategy',
+    expectedFormality: 'professional',
+    expectedStructure: 'structured',
+    tolerateAiPhrases: true,
+    tolerateFormalLanguage: true,
+    expectedMinLength: 50,
+    expectedMaxLength: 2500,
+    allowedPatterns: [],
+  },
+
+  // Default/general
+  general: {
+    gameType: 'general',
+    expectedFormality: 'professional',
+    expectedStructure: 'freeform',
+    tolerateAiPhrases: false,
+    tolerateFormalLanguage: false,
+    expectedMinLength: 20,
+    expectedMaxLength: 2000,
+    allowedPatterns: [],
+  },
+};
+
+/**
+ * Get game writing context for a skill category
+ */
+export const getGameWritingContext = (skillCategory: SkillCategory | string): GameWritingContext => {
+  return GAME_WRITING_CONTEXTS[skillCategory] || GAME_WRITING_CONTEXTS.general;
 };
 
 // ============================================================================
@@ -868,4 +1170,689 @@ export const addKnownTemplate = async (
     console.warn('Failed to add known template:', err);
     return false;
   }
+};
+
+// ============================================================================
+// PLAYER STYLE PROFILING - Build and compare against historical writing style
+// ============================================================================
+
+/**
+ * Build a style profile from a player's historical submissions
+ */
+export const buildPlayerStyleProfile = async (
+  supabase: SupabaseClient,
+  playerId: string,
+  minSamples: number = 5
+): Promise<PlayerStyleProfile | null> => {
+  try {
+    // Fetch recent submissions for this player
+    const { data: player } = await supabase
+      .from('players')
+      .select('progress')
+      .eq('id', playerId)
+      .single();
+
+    if (!player?.progress?.attempts) return null;
+
+    const attempts = player.progress.attempts as Array<{
+      submission: string;
+      score: number;
+      timestamp: string;
+    }>;
+
+    // Filter to non-empty submissions
+    const validSubmissions = attempts
+      .filter(a => a.submission && a.submission.length > 20)
+      .slice(-50); // Use last 50 submissions max
+
+    if (validSubmissions.length < minSamples) {
+      return null; // Not enough data to build profile
+    }
+
+    // Analyze each submission
+    const analyses = validSubmissions.map(a => analyzeSubmissionStyle(a.submission));
+
+    // Aggregate stats
+    const avgWordCount = analyses.reduce((s, a) => s + a.wordCount, 0) / analyses.length;
+    const avgSentenceLength = analyses.reduce((s, a) => s + a.avgSentenceLength, 0) / analyses.length;
+    const avgFormalityScore = analyses.reduce((s, a) => s + a.formalityScore, 0) / analyses.length;
+    const avgVocabRichness = analyses.reduce((s, a) => s + a.vocabularyRichness, 0) / analyses.length;
+
+    // Find common phrases (appearing in 30%+ of submissions)
+    const phraseCounts: Record<string, number> = {};
+    for (const a of analyses) {
+      for (const phrase of a.commonPhrases) {
+        phraseCounts[phrase] = (phraseCounts[phrase] || 0) + 1;
+      }
+    }
+    const threshold = analyses.length * 0.3;
+    const commonPhrases = Object.entries(phraseCounts)
+      .filter(([_, count]) => count >= threshold)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([phrase]) => phrase);
+
+    // Aggregate punctuation style
+    const usesExclamations = analyses.filter(a => a.punctuation.usesExclamations).length > analyses.length * 0.3;
+    const usesEllipsis = analyses.filter(a => a.punctuation.usesEllipsis).length > analyses.length * 0.3;
+    const avgCommas = analyses.reduce((s, a) => s + a.punctuation.avgCommasPerSentence, 0) / analyses.length;
+
+    // Aggregate writing patterns
+    const startsWithGreeting = analyses.filter(a => a.patterns.startsWithGreeting).length > analyses.length * 0.3;
+    const endsWithSignoff = analyses.filter(a => a.patterns.endsWithSignoff).length > analyses.length * 0.3;
+    const usesListFormat = analyses.filter(a => a.patterns.usesListFormat).length > analyses.length * 0.3;
+    const usesBulletPoints = analyses.filter(a => a.patterns.usesBulletPoints).length > analyses.length * 0.3;
+
+    return {
+      playerId,
+      sampleCount: analyses.length,
+      avgWordCount,
+      avgSentenceLength,
+      avgFormalityScore,
+      vocabularyRichness: avgVocabRichness,
+      punctuationStyle: {
+        usesExclamations,
+        usesEllipsis,
+        avgCommasPerSentence: avgCommas,
+      },
+      commonPhrases,
+      writingPatterns: {
+        startsWithGreeting,
+        endsWithSignoff,
+        usesListFormat,
+        usesBulletPoints,
+      },
+      lastUpdated: new Date().toISOString(),
+    };
+  } catch (err) {
+    console.error('Failed to build player style profile:', err);
+    return null;
+  }
+};
+
+/**
+ * Analyze writing style of a single submission
+ */
+const analyzeSubmissionStyle = (submission: string): {
+  wordCount: number;
+  avgSentenceLength: number;
+  formalityScore: number;
+  vocabularyRichness: number;
+  commonPhrases: string[];
+  punctuation: {
+    usesExclamations: boolean;
+    usesEllipsis: boolean;
+    avgCommasPerSentence: number;
+  };
+  patterns: {
+    startsWithGreeting: boolean;
+    endsWithSignoff: boolean;
+    usesListFormat: boolean;
+    usesBulletPoints: boolean;
+  };
+} => {
+  const normalized = submission.toLowerCase().trim();
+  const words = normalized.split(/\s+/).filter(w => w.length > 0);
+  const sentences = submission.split(/[.!?]+/).filter(s => s.trim().length > 0);
+
+  // Word count and sentence length
+  const wordCount = words.length;
+  const avgSentenceLength = sentences.length > 0 ? wordCount / sentences.length : 0;
+
+  // Vocabulary richness (unique words / total words)
+  const uniqueWords = new Set(words.map(w => w.replace(/[^\w]/g, '')));
+  const vocabularyRichness = wordCount > 0 ? uniqueWords.size / wordCount : 0;
+
+  // Calculate formality score
+  const formalityScore = calculateFormalityScore(normalized);
+
+  // Extract common 2-3 word phrases
+  const commonPhrases = extractCommonPhrases(normalized);
+
+  // Punctuation analysis
+  const usesExclamations = /!/.test(submission);
+  const usesEllipsis = /\.{3}|…/.test(submission);
+  const commaCount = (submission.match(/,/g) || []).length;
+  const avgCommasPerSentence = sentences.length > 0 ? commaCount / sentences.length : 0;
+
+  // Pattern analysis
+  const startsWithGreeting = /^(hi|hello|dear|good\s+(morning|afternoon|evening)|hey|greetings)/i.test(submission.trim());
+  const endsWithSignoff = /(best|regards|sincerely|thanks|thank you|cheers|warmly)\s*[,.!]?\s*$/i.test(submission.trim());
+  const usesListFormat = /^\s*[-•*]\s+/m.test(submission) || /^\s*\d+\.\s+/m.test(submission);
+  const usesBulletPoints = /[-•*]\s+/.test(submission);
+
+  return {
+    wordCount,
+    avgSentenceLength,
+    formalityScore,
+    vocabularyRichness,
+    commonPhrases,
+    punctuation: {
+      usesExclamations,
+      usesEllipsis,
+      avgCommasPerSentence,
+    },
+    patterns: {
+      startsWithGreeting,
+      endsWithSignoff,
+      usesListFormat,
+      usesBulletPoints,
+    },
+  };
+};
+
+/**
+ * Extract common 2-3 word phrases from text
+ */
+const extractCommonPhrases = (text: string): string[] => {
+  const words = text.split(/\s+/).filter(w => w.length > 2);
+  const phrases: string[] = [];
+
+  // 2-grams
+  for (let i = 0; i < words.length - 1; i++) {
+    phrases.push(`${words[i]} ${words[i + 1]}`);
+  }
+
+  // 3-grams
+  for (let i = 0; i < words.length - 2; i++) {
+    phrases.push(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
+  }
+
+  return phrases.slice(0, 20);
+};
+
+/**
+ * Compare a submission against player's historical style
+ */
+export const compareToPlayerStyle = (
+  submission: string,
+  profile: PlayerStyleProfile
+): StyleComparisonResult => {
+  const current = analyzeSubmissionStyle(submission);
+  const deviations: string[] = [];
+  let deviationScore = 0;
+
+  // Word count deviation
+  const wordCountRatio = current.wordCount / Math.max(profile.avgWordCount, 1);
+  if (wordCountRatio < 0.3 || wordCountRatio > 3) {
+    deviations.push(`Unusual length (${current.wordCount} words vs typical ${Math.round(profile.avgWordCount)})`);
+    deviationScore += 20;
+  } else if (wordCountRatio < 0.5 || wordCountRatio > 2) {
+    deviationScore += 10;
+  }
+
+  // Sentence length deviation
+  const sentenceLengthRatio = current.avgSentenceLength / Math.max(profile.avgSentenceLength, 1);
+  if (sentenceLengthRatio < 0.4 || sentenceLengthRatio > 2.5) {
+    deviations.push(`Unusual sentence structure`);
+    deviationScore += 15;
+  }
+
+  // Formality deviation
+  const formalityDiff = Math.abs(current.formalityScore - profile.avgFormalityScore);
+  if (formalityDiff > 0.4) {
+    deviations.push(`Significantly different formality level`);
+    deviationScore += 25;
+  } else if (formalityDiff > 0.25) {
+    deviationScore += 10;
+  }
+
+  // Vocabulary richness deviation
+  const vocabDiff = Math.abs(current.vocabularyRichness - profile.vocabularyRichness);
+  if (vocabDiff > 0.2) {
+    deviations.push(`Unusual vocabulary variety`);
+    deviationScore += 15;
+  }
+
+  // Punctuation style deviation
+  if (current.punctuation.usesExclamations !== profile.punctuationStyle.usesExclamations) {
+    deviationScore += 5;
+  }
+  if (current.punctuation.usesEllipsis !== profile.punctuationStyle.usesEllipsis) {
+    deviationScore += 5;
+  }
+
+  // Writing pattern deviation
+  if (current.patterns.startsWithGreeting !== profile.writingPatterns.startsWithGreeting) {
+    deviationScore += 5;
+  }
+  if (current.patterns.endsWithSignoff !== profile.writingPatterns.endsWithSignoff) {
+    deviationScore += 5;
+  }
+
+  // Determine confidence based on sample count
+  let confidenceLevel: 'high' | 'medium' | 'low' = 'low';
+  if (profile.sampleCount >= 20) {
+    confidenceLevel = 'high';
+  } else if (profile.sampleCount >= 10) {
+    confidenceLevel = 'medium';
+  }
+
+  // Cap deviation score
+  deviationScore = Math.min(100, deviationScore);
+
+  return {
+    isConsistentWithHistory: deviationScore < 40,
+    deviationScore,
+    deviations,
+    confidenceLevel,
+  };
+};
+
+// ============================================================================
+// APPEAL/REVIEW QUEUE - Allow flagged submissions to be reviewed
+// ============================================================================
+
+/**
+ * Add a submission to the review queue
+ */
+export const addToReviewQueue = async (
+  supabase: SupabaseClient,
+  playerId: string,
+  gameId: string,
+  submission: string,
+  detectionResult: GamingDetectionResult,
+  attemptId?: string
+): Promise<{ success: boolean; entryId?: string }> => {
+  try {
+    const { data, error } = await supabase
+      .from('submission_review_queue')
+      .insert({
+        player_id: playerId,
+        game_id: gameId,
+        attempt_id: attemptId,
+        submission_text: submission,
+        detection_result: detectionResult,
+        overall_risk: detectionResult.overallRisk,
+        risk_score: detectionResult.riskScore,
+        flags: detectionResult.flags,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('Failed to add to review queue:', error);
+      return { success: false };
+    }
+
+    return { success: true, entryId: data?.id };
+  } catch (err) {
+    console.error('Error adding to review queue:', err);
+    return { success: false };
+  }
+};
+
+/**
+ * Submit an appeal for a flagged submission
+ */
+export const submitAppeal = async (
+  supabase: SupabaseClient,
+  playerId: string,
+  gameId: string,
+  attemptId: string,
+  appealReason: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    // Check if there's an existing queue entry
+    const { data: existing } = await supabase
+      .from('submission_review_queue')
+      .select('id, status')
+      .eq('player_id', playerId)
+      .eq('attempt_id', attemptId)
+      .single();
+
+    if (existing && existing.status !== 'pending') {
+      return { success: false, error: 'This submission has already been reviewed' };
+    }
+
+    if (existing) {
+      // Update existing entry with appeal reason
+      await supabase
+        .from('submission_review_queue')
+        .update({
+          appeal_reason: appealReason,
+          appeal_submitted_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+    } else {
+      // Create new appeal entry
+      await supabase
+        .from('submission_review_queue')
+        .insert({
+          player_id: playerId,
+          game_id: gameId,
+          attempt_id: attemptId,
+          appeal_reason: appealReason,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+          appeal_submitted_at: new Date().toISOString(),
+        });
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Error submitting appeal:', err);
+    return { success: false, error: 'Failed to submit appeal' };
+  }
+};
+
+/**
+ * Get pending review queue entries
+ */
+export const getPendingReviews = async (
+  supabase: SupabaseClient,
+  limit: number = 50
+): Promise<ReviewQueueEntry[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('submission_review_queue')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    if (error) {
+      console.error('Failed to get pending reviews:', error);
+      return [];
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      playerId: row.player_id,
+      gameId: row.game_id,
+      submissionId: row.attempt_id,
+      submission: row.submission_text,
+      detectionResult: row.detection_result,
+      appealReason: row.appeal_reason,
+      status: row.status,
+      createdAt: row.created_at,
+    }));
+  } catch (err) {
+    console.error('Error getting pending reviews:', err);
+    return [];
+  }
+};
+
+/**
+ * Resolve a review queue entry
+ */
+export const resolveReview = async (
+  supabase: SupabaseClient,
+  entryId: string,
+  decision: 'approved' | 'rejected',
+  reviewerId: string,
+  resolution?: string,
+  restoreScore?: boolean
+): Promise<boolean> => {
+  try {
+    const { data: entry, error: fetchError } = await supabase
+      .from('submission_review_queue')
+      .select('*')
+      .eq('id', entryId)
+      .single();
+
+    if (fetchError || !entry) {
+      console.error('Review entry not found:', entryId);
+      return false;
+    }
+
+    // Update review status
+    await supabase
+      .from('submission_review_queue')
+      .update({
+        status: decision,
+        reviewed_by: reviewerId,
+        reviewed_at: new Date().toISOString(),
+        resolution: resolution,
+      })
+      .eq('id', entryId);
+
+    // If approved and score restoration requested, restore the original score
+    if (decision === 'approved' && restoreScore && entry.attempt_id) {
+      // This would need to update the player's progress - implementation depends on data structure
+      console.log(`Score restoration requested for attempt ${entry.attempt_id}`);
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error resolving review:', err);
+    return false;
+  }
+};
+
+/**
+ * Auto-resolve reviews based on additional context
+ * Called when new data suggests a flagged submission was legitimate
+ */
+export const autoResolveReviews = async (
+  supabase: SupabaseClient,
+  criteria: {
+    maxRiskScore?: number;
+    playerMinSubmissions?: number;
+    maxAgeHours?: number;
+  }
+): Promise<number> => {
+  try {
+    const {
+      maxRiskScore = 45,
+      playerMinSubmissions = 10,
+      maxAgeHours = 72,
+    } = criteria;
+
+    const cutoffTime = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000).toISOString();
+
+    // Get pending reviews that meet auto-resolve criteria
+    const { data: reviews } = await supabase
+      .from('submission_review_queue')
+      .select('id, player_id, risk_score')
+      .eq('status', 'pending')
+      .lte('risk_score', maxRiskScore)
+      .gte('created_at', cutoffTime);
+
+    if (!reviews || reviews.length === 0) return 0;
+
+    let resolved = 0;
+
+    for (const review of reviews) {
+      // Check player history
+      const { data: player } = await supabase
+        .from('players')
+        .select('progress')
+        .eq('id', review.player_id)
+        .single();
+
+      const attempts = player?.progress?.attempts || [];
+      if (attempts.length >= playerMinSubmissions) {
+        // Auto-approve
+        await supabase
+          .from('submission_review_queue')
+          .update({
+            status: 'auto_resolved',
+            resolution: 'Auto-resolved: Player has good history and risk score was low',
+            reviewed_at: new Date().toISOString(),
+          })
+          .eq('id', review.id);
+        resolved++;
+      }
+    }
+
+    return resolved;
+  } catch (err) {
+    console.error('Error auto-resolving reviews:', err);
+    return 0;
+  }
+};
+
+// ============================================================================
+// CONTEXT-AWARE DETECTION - Apply game context to adjust detection
+// ============================================================================
+
+/**
+ * Apply context-aware adjustments to gaming detection scores
+ */
+export const applyContextAwareAdjustments = (
+  scores: GamingDetectionResult['scores'],
+  signals: GamingSignals,
+  flags: string[],
+  gameContext: GameWritingContext,
+  playerStyle?: StyleComparisonResult
+): {
+  adjustedScores: GamingDetectionResult['scores'];
+  adjustedFlags: string[];
+  contextAdjustments: string[];
+} => {
+  const adjustedScores = { ...scores };
+  const adjustedFlags = [...flags];
+  const contextAdjustments: string[] = [];
+
+  // 1. Adjust AI detection based on expected formality
+  if (gameContext.tolerateAiPhrases || gameContext.tolerateFormalLanguage) {
+    // Reduce AI detection score for games that expect formal writing
+    if (adjustedScores.aiGenerated > 0) {
+      const reduction = gameContext.tolerateAiPhrases ? 0.5 : 0.3;
+      const originalScore = adjustedScores.aiGenerated;
+      adjustedScores.aiGenerated = Math.max(0, adjustedScores.aiGenerated * (1 - reduction));
+
+      if (originalScore !== adjustedScores.aiGenerated) {
+        contextAdjustments.push(`AI score reduced (formal writing expected for ${gameContext.gameType})`);
+
+        // Remove or soften AI-related flags
+        const aiFlags = adjustedFlags.filter(f => f.toLowerCase().includes('ai') || f.toLowerCase().includes('formal'));
+        if (aiFlags.length > 0 && adjustedScores.aiGenerated < 30) {
+          // Remove AI flags if score is now low
+          for (const flag of aiFlags) {
+            const idx = adjustedFlags.indexOf(flag);
+            if (idx >= 0) adjustedFlags.splice(idx, 1);
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Adjust based on expected structure
+  if (gameContext.expectedStructure === 'template-like' || gameContext.expectedStructure === 'structured') {
+    // Reduce template match score for games that expect template-like content
+    if (adjustedScores.templateMatch > 0 && adjustedScores.templateMatch < 70) {
+      adjustedScores.templateMatch = Math.max(0, adjustedScores.templateMatch * 0.6);
+      contextAdjustments.push(`Template score reduced (structured format expected)`);
+    }
+  }
+
+  // 3. Adjust based on player's historical style
+  if (playerStyle && playerStyle.confidenceLevel !== 'low') {
+    if (playerStyle.isConsistentWithHistory) {
+      // Player is writing in their usual style - reduce suspicion
+      const styleBonus = playerStyle.confidenceLevel === 'high' ? 0.3 : 0.2;
+      adjustedScores.aiGenerated = Math.max(0, adjustedScores.aiGenerated * (1 - styleBonus));
+      contextAdjustments.push(`Style consistent with player history (confidence: ${playerStyle.confidenceLevel})`);
+    } else if (playerStyle.deviationScore > 60) {
+      // Significant deviation from usual style - add suspicion
+      const penalty = Math.min(20, playerStyle.deviationScore * 0.3);
+      adjustedScores.aiGenerated = Math.min(100, adjustedScores.aiGenerated + penalty);
+      contextAdjustments.push(`Style deviates from player history: ${playerStyle.deviations.join(', ')}`);
+      adjustedFlags.push(`Writing style significantly different from usual`);
+    }
+  }
+
+  // 4. Check allowed patterns
+  if (gameContext.allowedPatterns.length > 0) {
+    for (const patternStr of gameContext.allowedPatterns) {
+      try {
+        const pattern = new RegExp(patternStr, 'i');
+        // If submission matches expected patterns, reduce suspicion
+        // (This would need the actual submission text to check)
+      } catch {
+        // Invalid regex, skip
+      }
+    }
+  }
+
+  return {
+    adjustedScores,
+    adjustedFlags,
+    contextAdjustments,
+  };
+};
+
+/**
+ * Enhanced detection with context awareness
+ */
+export const detectGamingWithContext = async (
+  submission: string,
+  context: DetectionContext,
+  supabase?: SupabaseClient
+): Promise<GamingDetectionResult & { contextAdjustments: string[] }> => {
+  // Run base detection
+  const baseResult = await detectGaming(submission, context, supabase);
+
+  // Get game context
+  const gameContext = context.gameContext || getGameWritingContext(context.skillCategory);
+
+  // Build player style profile if not provided and we have supabase
+  let playerStyle: StyleComparisonResult | undefined;
+  if (supabase && !context.playerStyleProfile) {
+    const profile = await buildPlayerStyleProfile(supabase, context.playerId);
+    if (profile) {
+      playerStyle = compareToPlayerStyle(submission, profile);
+    }
+  } else if (context.playerStyleProfile) {
+    playerStyle = compareToPlayerStyle(submission, context.playerStyleProfile);
+  }
+
+  // Apply context-aware adjustments
+  const { adjustedScores, adjustedFlags, contextAdjustments } = applyContextAwareAdjustments(
+    baseResult.scores,
+    baseResult.signals,
+    baseResult.flags,
+    gameContext,
+    playerStyle
+  );
+
+  // Recalculate overall risk with adjusted scores
+  const adjustedRiskScore = calculateOverallRiskScore(adjustedScores);
+  const adjustedRiskLevel = determineRiskLevel(adjustedRiskScore);
+  const { recommendedAction, scorePenalty } = determineAction(adjustedRiskLevel, baseResult.signals);
+
+  // If flagged for review, add to queue
+  if (supabase && recommendedAction === 'flag_review') {
+    await addToReviewQueue(supabase, context.playerId, context.gameId, submission, {
+      ...baseResult,
+      scores: adjustedScores,
+      flags: adjustedFlags,
+      overallRisk: adjustedRiskLevel,
+      riskScore: adjustedRiskScore,
+      recommendedAction,
+      scorePenalty,
+    });
+  }
+
+  return {
+    ...baseResult,
+    scores: adjustedScores,
+    flags: adjustedFlags,
+    overallRisk: adjustedRiskLevel,
+    riskScore: adjustedRiskScore,
+    recommendedAction,
+    scorePenalty,
+    contextAdjustments,
+  };
+};
+
+/**
+ * Format context adjustment feedback for display
+ */
+export const formatContextAdjustmentFeedback = (
+  contextAdjustments: string[]
+): string => {
+  if (contextAdjustments.length === 0) return '';
+
+  return `
+<details style="margin-top:8px;font-size:0.85em;color:#94a3b8;">
+  <summary style="cursor:pointer;">Scoring context adjustments applied</summary>
+  <ul style="margin-top:4px;padding-left:20px;">
+    ${contextAdjustments.map(a => `<li>${a}</li>`).join('')}
+  </ul>
+</details>`;
 };

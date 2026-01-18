@@ -3,11 +3,19 @@ import type { TimeFilter } from '../../types.js';
 export type TeamScoringConfig = {
   topN: number;
   minAttemptsPerMember: number;
+  // NEW: Team size normalization settings
+  enableSizeBonus: boolean;
+  sizeBonusPerExtraMember: number; // Bonus points per eligible member beyond topN
+  maxSizeBonus: number; // Cap on total size bonus
 };
 
 export const DEFAULT_TEAM_SCORING_CONFIG: TeamScoringConfig = {
   topN: 5,
   minAttemptsPerMember: 3,
+  // NEW: Reward teams with more active members (+2 pts per extra member, max +10)
+  enableSizeBonus: true,
+  sizeBonusPerExtraMember: 2,
+  maxSizeBonus: 10,
 };
 
 export const getWindowStart = (timeFilter: TimeFilter): number | null => {
@@ -61,7 +69,7 @@ export const computeTeamScore = (
   playersById: Map<string, { progress?: any; score?: number }>,
   timeFilter: TimeFilter,
   config: TeamScoringConfig = DEFAULT_TEAM_SCORING_CONFIG
-): { score: number; eligibleMembers: number } => {
+): { score: number; eligibleMembers: number; sizeBonus: number; baseScore: number } => {
   const memberScores: number[] = [];
 
   for (const m of members) {
@@ -73,8 +81,27 @@ export const computeTeamScore = (
 
   memberScores.sort((a, b) => b - a);
   const top = memberScores.slice(0, config.topN);
-  if (top.length === 0) return { score: 0, eligibleMembers: 0 };
-  const avg = Math.round(top.reduce((sum, s) => sum + s, 0) / top.length);
-  return { score: avg, eligibleMembers: top.length };
+  if (top.length === 0) return { score: 0, eligibleMembers: 0, sizeBonus: 0, baseScore: 0 };
+
+  const baseScore = Math.round(top.reduce((sum, s) => sum + s, 0) / top.length);
+
+  // NEW: Calculate team size bonus for teams with more than topN eligible members
+  let sizeBonus = 0;
+  if (config.enableSizeBonus && memberScores.length > config.topN) {
+    const extraMembers = memberScores.length - config.topN;
+    sizeBonus = Math.min(
+      extraMembers * config.sizeBonusPerExtraMember,
+      config.maxSizeBonus
+    );
+  }
+
+  const finalScore = baseScore + sizeBonus;
+
+  return {
+    score: finalScore,
+    eligibleMembers: memberScores.length, // Return total eligible, not just top N
+    sizeBonus,
+    baseScore,
+  };
 };
 

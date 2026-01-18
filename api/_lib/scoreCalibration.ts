@@ -583,19 +583,58 @@ export const setGameCalibration = async (
 
 /**
  * Formats calibration info for feedback display
+ * ENHANCED: Shows raw vs calibrated score with explanation
  */
 export const formatCalibrationFeedback = (result: CalibrationResult): string => {
   if (result.adjustmentApplied === 0) {
     return '';
   }
 
-  const direction = result.adjustmentApplied > 0 ? 'bonus' : 'adjustment';
-  const amount = Math.abs(result.adjustmentApplied);
-  const sign = result.adjustmentApplied > 0 ? '+' : '-';
+  const adjustment = result.adjustmentApplied;
+  const sign = adjustment > 0 ? '+' : '';
+  const amount = Math.abs(adjustment);
 
-  return `<p style="color:#8b5cf6;font-size:0.9em;margin-top:8px;">
-    <em>Score includes ${sign}${amount} point difficulty ${direction} for balanced comparison.</em>
-  </p>`;
+  // Determine explanation based on direction
+  let explanation: string;
+  let icon: string;
+  let borderColor: string;
+
+  if (adjustment > 0) {
+    // Game is harder than average - bonus applied
+    icon = '📈';
+    borderColor = '#22c55e'; // green
+    explanation = 'This game is more challenging than average for its difficulty level, so we added a fairness bonus.';
+  } else {
+    // Game is easier than average - adjustment applied
+    icon = '📊';
+    borderColor = '#8b5cf6'; // purple
+    explanation = 'This game tends to score higher than average for its difficulty level, so we applied a small adjustment for fair comparison.';
+  }
+
+  return `
+<div style="background:#1e1e2e;padding:10px;border-radius:6px;border-left:3px solid ${borderColor};margin:8px 0;font-size:0.9em;">
+  <p style="margin:0 0 6px 0;color:${borderColor};">
+    <strong>${icon} Difficulty Calibration</strong>
+  </p>
+  <p style="margin:0 0 4px 0;color:#a0a0b0;">
+    Raw score: <strong>${result.rawScore}</strong> → Calibrated: <strong>${result.calibratedScore}</strong> (${sign}${amount} pts)
+  </p>
+  <p style="margin:0;color:#707080;font-size:0.85em;">
+    ${explanation}
+  </p>
+</div>`;
+};
+
+/**
+ * Format a brief inline calibration note (for compact display)
+ */
+export const formatCalibrationNote = (result: CalibrationResult): string => {
+  if (result.adjustmentApplied === 0) {
+    return '';
+  }
+
+  const sign = result.adjustmentApplied > 0 ? '+' : '';
+  return `(${sign}${result.adjustmentApplied} calibration)`;
 };
 
 /**

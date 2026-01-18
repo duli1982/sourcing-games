@@ -16,6 +16,9 @@ import {
 } from './_lib/enhancedScoring.js';
 import {
   calculateMultiReferenceScore,
+  calculateMultiReferenceScoreWithCrossGame,
+  formatCrossGameFeedback,
+  type CrossGameReferenceResult,
   calculateMultiReferenceWeight,
   formatMultiReferenceFeedback,
   addReferenceAnswer,
@@ -56,6 +59,9 @@ import {
 } from './_lib/scoreCalibration.js';
 import {
   detectGaming,
+  detectGamingWithContext,
+  formatContextAdjustmentFeedback,
+  getGameWritingContext,
   logGamingDetection,
   formatGamingFeedback,
   type GamingDetectionResult,
@@ -70,10 +76,46 @@ import {
   updateSkillMemory,
   getSpacedRepetitionSummary,
   formatSpacedRepetitionFeedback,
+  getPlayerSkillMemories,
 } from './_lib/spacedRepetition.js';
 import { buildCustomGameFromOverride } from './_lib/customGames.js';
 import { buildReviewReasons, enqueueReview } from './_lib/reviewQueue.js';
 import { logRubricCriteriaScores, type RubricBreakdown } from './_lib/rubricTuning.js';
+import {
+  applyConsistencyChecks,
+  formatConsistencyFeedback,
+  logConsistencyAnalytics,
+  DEFAULT_CONSISTENCY_CONFIG,
+  type ConsistencyResult,
+} from './_lib/aiScoringConsistency.js';
+import {
+  validateRubricBreakdown,
+  formatRubricValidationFeedback,
+  calculateCorrectedScore,
+  getRubricBreakdownSummary,
+  type RubricValidationResult,
+} from './_lib/rubricAggregation.js';
+import {
+  calculatePeerComparison,
+  formatPeerComparisonFeedback,
+  formatTopPercentageBadge,
+  DEFAULT_PEER_CONFIG,
+  type PeerComparisonResult,
+} from './_lib/peerComparison.js';
+import {
+  calculateXpBonus,
+  shouldEnableReviewMode,
+  applyReviewMode,
+  recordRetentionDataPoint,
+  getRetentionStats,
+  formatXpBonusFeedback,
+  formatReviewModeFeedback,
+  formatRetentionFeedback,
+  REVIEW_MODE_CONFIG,
+  type XpBonusResult,
+  type ReviewModeResult,
+  type RetentionStats,
+} from './_lib/spacedRepetitionEnhancements.js';
 
 const GEMINI_MAX_OUTPUT_TOKENS = 800; // Increased for structured JSON output
 const GEMINI_PROMPT_CHAR_LIMIT = 4500; // Increased further for RAG context
@@ -130,8 +172,8 @@ const GEMINI_RESPONSE_SCHEMA = {
   },
 };
 
-// Enhanced scoring system v2.8 - adds feedback quality monitoring
-const SCORING_VERSION = '2.8.0';
+// Enhanced scoring system v3.1 - adds spaced repetition XP bonus, review mode, retention tracking
+const SCORING_VERSION = '3.1.0';
 
 type PlayerRow = {
   id: string;
@@ -943,6 +985,76 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
     }
 
     // ========================================================================
+    // RUBRIC AGGREGATION VALIDATION v3.0
+    // Validates AI rubric scoring against game rubric definition
+    // ========================================================================
+
+    let rubricValidationResult: RubricValidationResult | null = null;
+    let rubricValidationFeedback = '';
+
+    if (aiRubricBreakdown && Object.keys(aiRubricBreakdown).length > 0 && !usedAutomatedOnly) {
+      try {
+        const gameRubric = game.rubric || rubricByDifficulty[game.difficulty];
+
+        // Validate AI rubric breakdown against game rubric
+        rubricValidationResult = validateRubricBreakdown(
+          aiRubricBreakdown,
+          gameRubric,
+          score,
+          {
+            allowFuzzyMatch: true,
+            maxScoreDivergence: 8, // Allow up to 8 points difference
+            autoCorrectExceedingPoints: true,
+            autoCorrectScoreMismatch: false, // Only warn, don't auto-correct
+            fuzzyMatchThreshold: 0.65,
+          }
+        );
+
+        // Log validation results
+        const { aggregation, issues, warnings } = rubricValidationResult;
+        console.log(`Rubric validation for ${game.id}: ` +
+          `sum=${aggregation.totalPointsAwarded}/${aggregation.totalMaxPoints} (${aggregation.percentageScore}%), ` +
+          `aiScore=${score}, ` +
+          `matched=${aggregation.matchedCriteria}/${aggregation.criteriaCount}, ` +
+          `issues=${issues.length}, warnings=${warnings.length}`);
+
+        // Log detailed issues if any
+        if (issues.length > 0) {
+          console.log(`Rubric issues for ${game.id}:`, issues.map(i => i.message));
+        }
+
+        // Check if score should be corrected based on rubric
+        const correctionResult = calculateCorrectedScore(score, rubricValidationResult, {
+          rubricWeight: 0.25, // Blend 25% rubric score with 75% AI score
+          divergenceThreshold: 12, // Only correct if divergence > 12 points
+        });
+
+        if (correctionResult.wasAdjusted) {
+          console.log(`Rubric score correction for ${game.id}: ` +
+            `${score} -> ${correctionResult.score} (adjustment: ${correctionResult.adjustment > 0 ? '+' : ''}${correctionResult.adjustment})`);
+          score = correctionResult.score;
+        }
+
+        // Generate rubric validation feedback (shown in collapsible details)
+        rubricValidationFeedback = formatRubricValidationFeedback(rubricValidationResult, true);
+
+        // Get rubric breakdown summary for analytics
+        if (rubricValidationResult.correctedBreakdown) {
+          const summary = getRubricBreakdownSummary(rubricValidationResult.correctedBreakdown);
+          if (summary.lowestCriterion) {
+            console.log(`Rubric breakdown for ${game.id}: ` +
+              `lowest="${summary.lowestCriterion}", ` +
+              `highest="${summary.highestCriterion}", ` +
+              `avg=${summary.averagePercentage}%`);
+          }
+        }
+      } catch (rubricValidationError) {
+        console.warn('Rubric validation failed:', rubricValidationError);
+        // Continue without rubric validation - non-critical feature
+      }
+    }
+
+    // ========================================================================
     // ENHANCED SCORING v2.1 - Ensemble + Multi-Reference scoring
     // ========================================================================
 
@@ -987,14 +1099,24 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
     let multiRefReferencesCompared = 0;
     let multiRefVerifiedCount = 0;
     let multiRefBestSimilarity: number | undefined;
+    let crossGameInfo: CrossGameReferenceResult | null = null;
 
     if (submissionEmbedding.length > 0) {
       try {
-        // Get reference stats and multi-reference score
+        // Get reference stats and multi-reference score WITH cross-game fallback
         const [refStats, multiRefResult] = await Promise.all([
           getReferenceStats(supabase, game.id),
-          calculateMultiReferenceScore(supabase, game.id, submissionEmbedding),
+          calculateMultiReferenceScoreWithCrossGame(
+            supabase,
+            game.id,
+            game.skillCategory,
+            submissionEmbedding,
+            game.difficulty
+          ),
         ]);
+
+        // Store cross-game info for logging and feedback
+        crossGameInfo = multiRefResult.crossGameInfo;
 
         if (multiRefResult.references.length > 0) {
           // Track reference data for analytics
@@ -1003,7 +1125,12 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
           multiRefBestSimilarity = multiRefResult.bestMatchSimilarity;
 
           // Calculate weight for multi-reference scoring
-          const multiRefWeight = calculateMultiReferenceWeight(refStats);
+          // Reduce weight if using cross-game references
+          let multiRefWeight = calculateMultiReferenceWeight(refStats);
+          if (crossGameInfo?.usedCrossGameFallback) {
+            // Apply weight reduction for cross-game references
+            multiRefWeight *= 0.7;
+          }
 
           if (multiRefWeight > 0) {
             // Adjust score based on multi-reference analysis
@@ -1013,19 +1140,31 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
 
             multiRefScoreAdjustment = Math.round(similarityBonus * multiRefWeight * 10);
             multiRefFeedback = formatMultiReferenceFeedback(multiRefResult, refStats);
+
+            // Add cross-game feedback if applicable
+            if (crossGameInfo?.usedCrossGameFallback) {
+              multiRefFeedback = formatCrossGameFeedback(crossGameInfo, multiRefResult.averageSimilarity) + multiRefFeedback;
+            }
+
             const peerInsightHtml = buildPeerComparisonInsights(submission, multiRefResult.references);
             if (peerInsightHtml) {
               multiRefFeedback += peerInsightHtml;
             }
 
+            // Enhanced logging with cross-game info
+            const crossGameLog = crossGameInfo?.usedCrossGameFallback
+              ? `CROSS-GAME: ${crossGameInfo.totalFromCurrentGame}+${crossGameInfo.totalFromCrossGame} refs from ${crossGameInfo.sourceGames.length} games, `
+              : '';
+
             console.log(`Multi-reference scoring for ${game.id}: ` +
-              `${multiRefResult.references.length} refs, ` +
+              `${crossGameLog}` +
+              `${multiRefResult.references.length} total refs, ` +
               `avgSim=${(multiRefResult.averageSimilarity * 100).toFixed(1)}%, ` +
               `weight=${(multiRefWeight * 100).toFixed(1)}%, ` +
               `adjustment=${multiRefScoreAdjustment > 0 ? '+' : ''}${multiRefScoreAdjustment}`);
           }
         } else {
-          console.log(`No reference answers found for ${game.id}`);
+          console.log(`No reference answers found for ${game.id} (including cross-game fallback)`);
         }
       } catch (multiRefError) {
         console.warn('Multi-reference scoring failed:', multiRefError);
@@ -1041,7 +1180,47 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
     let gamingPenalty = 0;
     let scoreBeforeGamingPenalty = 0;
 
+    // AI Scoring Consistency variables
+    let consistencyResult: ConsistencyResult | null = null;
+
     if (!usedAutomatedOnly && validation) {
+      // ========================================================================
+      // AI SCORING CONSISTENCY v1.0
+      // Cross-model validation for high-stakes scores & confidence-adjusted weighting
+      // ========================================================================
+
+      try {
+        // Apply consistency checks (cross-validation for high scores, confidence adjustment)
+        consistencyResult = await applyConsistencyChecks(
+          ai,
+          trimmedPrompt,
+          score, // Initial AI score
+          feedbackText,
+          GEMINI_RESPONSE_SCHEMA,
+          (text: string) => {
+            const parsed = parseAiResponseStrict(text);
+            return { score: parsed.score, feedback: parsed.feedback };
+          },
+          validation.score > 0 ? Math.round((1 - Math.abs(score - validation.score) / 100) * 100) : 50, // Ensemble confidence proxy
+          0.55, // Base AI weight
+          DEFAULT_CONSISTENCY_CONFIG
+        );
+
+        // Log consistency analytics
+        logConsistencyAnalytics(consistencyResult, game.id, playerRow.id);
+
+        // If cross-validation adjusted the score, use the adjusted score
+        if (consistencyResult.crossValidation?.wasValidated && !consistencyResult.crossValidation.validationPassed) {
+          console.log(`Consistency adjustment for ${game.id}: ` +
+            `${score} -> ${consistencyResult.adjustedScore} ` +
+            `(${consistencyResult.crossValidation.adjustmentReason})`);
+          score = consistencyResult.adjustedScore;
+        }
+      } catch (consistencyError) {
+        console.warn('AI scoring consistency check failed:', consistencyError);
+        // Continue without consistency adjustments
+      }
+
       enhancedResult = calculateEnhancedScore({
         submission,
         game,
@@ -1051,6 +1230,13 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
         aiFeedback: feedbackText,
         embeddingSimilarity,
         playerSkillLevel: userSkillLevel,
+        // Pass consistency parameters if available
+        consistencyParams: consistencyResult ? {
+          adjustedAiWeight: consistencyResult.adjustedAiWeight,
+          confidenceLevel: consistencyResult.confidenceLevel,
+          consistencyFlags: consistencyResult.consistencyFlags,
+          consistencyFeedback: formatConsistencyFeedback(consistencyResult),
+        } : undefined,
       });
 
       // Use enhanced score and feedback
@@ -1076,8 +1262,13 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
         // Continue without calibration
       }
 
-      // Combine feedback: multi-reference + ensemble + AI
+      // Combine feedback: multi-reference + ensemble + AI + rubric validation
       feedbackText = multiRefFeedback + enhancedResult.feedback;
+
+      // Add rubric validation feedback (collapsible details section)
+      if (rubricValidationFeedback) {
+        feedbackText += rubricValidationFeedback;
+      }
 
       // Add calibration note to feedback if adjustment was applied
       if (calibrationResult && calibrationResult.adjustmentApplied !== 0) {
@@ -1085,19 +1276,29 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
       }
 
       // ========================================================================
-      // ENHANCED ANTI-GAMING DETECTION v2.7
+      // ENHANCED ANTI-GAMING DETECTION v3.0 - Now with Context Awareness
       // Detects keyword stuffing, template copying, AI-generated content
+      // Adjusts detection based on game type and player writing history
       // ========================================================================
 
       scoreBeforeGamingPenalty = score;
+      let contextAdjustments: string[] = [];
 
       try {
-        gamingDetectionResult = await detectGaming(submission, {
+        // Get game writing context for context-aware detection
+        const gameContext = getGameWritingContext(game.skillCategory);
+
+        // Use context-aware detection (includes player style profiling)
+        const contextAwareResult = await detectGamingWithContext(submission, {
           playerId: playerRow.id,
           gameId: game.id,
           skillCategory: game.skillCategory,
           exampleSolution: game.exampleSolution,
+          gameContext,
         }, supabase);
+
+        gamingDetectionResult = contextAwareResult;
+        contextAdjustments = contextAwareResult.contextAdjustments || [];
 
         // Apply gaming penalty if detected
         if (gamingDetectionResult.scorePenalty > 0) {
@@ -1106,10 +1307,20 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
           console.log(`Gaming penalty applied for ${game.id}: -${gamingPenalty} (risk: ${gamingDetectionResult.overallRisk}, score: ${gamingDetectionResult.riskScore.toFixed(1)})`);
         }
 
+        // Log context adjustments
+        if (contextAdjustments.length > 0) {
+          console.log(`Context adjustments for ${game.id}:`, contextAdjustments);
+        }
+
         // Add gaming feedback if needed
         const gamingFeedback = formatGamingFeedback(gamingDetectionResult);
         if (gamingFeedback) {
           feedbackText = gamingFeedback + feedbackText;
+        }
+
+        // Add context adjustment feedback (collapsible details)
+        if (contextAdjustments.length > 0) {
+          feedbackText += formatContextAdjustmentFeedback(contextAdjustments);
         }
 
         // Log gaming detection results
@@ -1121,10 +1332,18 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
         // Continue without gaming detection
       }
 
+      // Build consistency info for logging
+      const consistencyInfo = consistencyResult
+        ? `AIWeight=${consistencyResult.adjustedAiWeight.toFixed(2)}(was ${consistencyResult.originalAiWeight.toFixed(2)}), ` +
+          `ConsistencyConf=${consistencyResult.confidenceLevel}, ` +
+          `CrossVal=${consistencyResult.crossValidation?.wasValidated ? (consistencyResult.crossValidation.validationPassed ? 'passed' : 'adjusted') : 'skipped'}, `
+        : '';
+
       console.log(`Enhanced scoring v${SCORING_VERSION}: ` +
         `AI=${enhancedResult.ensemble.components.aiScore}, ` +
         `Validation=${enhancedResult.ensemble.components.validationScore}, ` +
         `Embedding=${Math.round(embeddingSimilarity * 100)}, ` +
+        `${consistencyInfo}` +
         `MultiRef=${multiRefScoreAdjustment > 0 ? '+' : ''}${multiRefScoreAdjustment}, ` +
         `Calibration=${calibrationAdjustment > 0 ? '+' : ''}${calibrationAdjustment}, ` +
         `GamingPenalty=${gamingPenalty > 0 ? '-' : ''}${gamingPenalty}, ` +
@@ -1158,31 +1377,64 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
     // Map current player data early (needed for historical delta calculation)
     const currentPlayer = mapPlayer(playerRow);
 
-    let feedbackWithPeer = enhancedFeedback;
-    try {
-      const { data: peerRows } = await supabase.from('players').select('progress');
-      const peerScores: number[] = [];
-      peerRows?.forEach(row => {
-        const attemptsArr = (row?.progress?.attempts || []) as Attempt[];
-        attemptsArr.forEach((a) => {
-          if (a?.gameId === game.id && typeof a.score === 'number') {
-            peerScores.push(a.score);
-          }
-        });
-      });
+    // ========================================================================
+    // ENHANCED PEER COMPARISON v3.0
+    // Game-specific + skill-category-wide percentiles, top X% rankings,
+    // and optional curve mode for competitive games
+    // ========================================================================
 
-      const peerStats = computePeerStats(peerScores, score);
-      if (peerStats && peerStats.count >= 5) {
-        const peerBlock = `
-<div style="background:#0b1220;padding:10px;border-radius:8px;border:1px solid #0ea5e9;margin-bottom:10px;">
-  <p><strong>Peer comparison</strong></p>
-  <p>Most players score between ${peerStats.p15}-${peerStats.p85} on this game (n=${peerStats.count}).</p>
-  <p>Your score: ${score} - around the ${peerStats.percentile}th percentile.</p>
-</div>`;
-        feedbackWithPeer = peerBlock + feedbackWithPeer;
+    let feedbackWithPeer = enhancedFeedback;
+    let peerComparisonResult: PeerComparisonResult | null = null;
+
+    try {
+      // Calculate comprehensive peer comparison with category-wide stats
+      peerComparisonResult = await calculatePeerComparison(
+        supabase,
+        game.id,
+        game.skillCategory,
+        score,
+        {
+          ...DEFAULT_PEER_CONFIG,
+          enableCurveMode: false, // Curve mode disabled by default, can be enabled per-game
+          enableCategoryPercentiles: true,
+          minPeerCount: 5,
+          minCategoryGames: 2,
+        }
+      );
+
+      // Format peer comparison feedback
+      if (peerComparisonResult.gameStats || peerComparisonResult.categoryStats) {
+        const peerFeedback = formatPeerComparisonFeedback(
+          peerComparisonResult,
+          score,
+          true // Show details
+        );
+
+        if (peerFeedback) {
+          feedbackWithPeer = peerFeedback + feedbackWithPeer;
+        }
+
+        // Log peer comparison stats
+        if (peerComparisonResult.gameStats) {
+          const gs = peerComparisonResult.gameStats;
+          console.log(`Peer comparison for ${game.id}: ` +
+            `top ${gs.topPercentage}%, ` +
+            `rank #${gs.rank}/${gs.count}, ` +
+            `score=${score}, median=${gs.median}, ` +
+            `performance=${peerComparisonResult.performanceLevel}`);
+        }
+
+        // Log category stats if available
+        if (peerComparisonResult.categoryStats) {
+          const cs = peerComparisonResult.categoryStats;
+          console.log(`Category stats for ${cs.skillCategory}: ` +
+            `top ${cs.topPercentage}% across ${cs.gamesIncluded} games, ` +
+            `${cs.uniquePlayers} players`);
+        }
       }
     } catch (peerErr) {
-      console.warn('Peer stats lookup failed', peerErr);
+      console.warn('Enhanced peer comparison failed:', peerErr);
+      // Continue without peer comparison
     }
 
     // ========================================================================
@@ -1275,10 +1527,15 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
     }
 
     // ========================================================================
-    // SPACED REPETITION v1.0 - Weak-skill reinforcement and review scheduling
+    // SPACED REPETITION v2.0 - Enhanced with XP bonus, review mode, retention tracking
     // ========================================================================
 
     let spacedRepetitionHtml = '';
+    let xpBonusResult: XpBonusResult | null = null;
+    let reviewModeResult: ReviewModeResult | null = null;
+    let retentionStats: RetentionStats | null = null;
+    let finalScoreWithBonus = score;
+
     try {
       const skillUpdate = await updateSkillMemory(
         supabase,
@@ -1296,10 +1553,111 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
           spacedRepetitionHtml += recHtml;
         }
       }
+
+      // ========================================================================
+      // XP BONUS FOR WEAK SKILLS - Rewards practicing areas that need improvement
+      // ========================================================================
+
+      const previousAttemptScore = currentPlayer.attempts
+        .filter(a => a.skill === game.skillCategory)
+        .slice(-1)[0]?.score ?? null;
+
+      xpBonusResult = await calculateXpBonus(
+        supabase,
+        currentPlayer.id,
+        game.skillCategory,
+        game.id,
+        score,
+        game.difficulty,
+        previousAttemptScore
+      );
+
+      if (xpBonusResult.bonusXp > 0) {
+        finalScoreWithBonus = xpBonusResult.totalXp;
+        const xpBonusFeedback = formatXpBonusFeedback(xpBonusResult);
+        spacedRepetitionHtml = xpBonusFeedback + spacedRepetitionHtml;
+
+        console.log(`XP bonus for ${game.id}: +${xpBonusResult.bonusXp} ` +
+          `(base=${score}, total=${finalScoreWithBonus}, ` +
+          `breakdown: ${xpBonusResult.bonusBreakdown.map(b => b.type).join(', ')})`);
+      }
+
+      // ========================================================================
+      // REVIEW MODE - Reduced scoring pressure for learning
+      // ========================================================================
+
+      // Get skill memory for review mode check
+      const skillMemories = await getPlayerSkillMemories(supabase, currentPlayer.id);
+      const currentSkillMemory = skillMemories.find(m => m.skillCategory === game.skillCategory) || null;
+
+      // Check if review mode should be enabled (auto-enabled for weak skills)
+      const isReviewModeRequested = false; // Could be passed in request body
+      const shouldReview = shouldEnableReviewMode(currentSkillMemory, isReviewModeRequested);
+
+      if (shouldReview) {
+        reviewModeResult = applyReviewMode(score, currentSkillMemory, {
+          ...REVIEW_MODE_CONFIG,
+          enabled: true,
+        });
+
+        if (reviewModeResult.isReviewMode) {
+          const reviewFeedback = formatReviewModeFeedback(reviewModeResult);
+          spacedRepetitionHtml = reviewFeedback + spacedRepetitionHtml;
+
+          // In review mode, use reduced XP contribution
+          finalScoreWithBonus = Math.max(
+            reviewModeResult.xpContribution,
+            score // Always give at least the base score
+          );
+
+          console.log(`Review mode active for ${game.id}: ` +
+            `original=${score}, contribution=${reviewModeResult.xpContribution}`);
+        }
+      }
+
+      // ========================================================================
+      // RETENTION TRACKING - Track skill retention over time
+      // ========================================================================
+
+      // Record retention data point
+      const bestScore = currentSkillMemory?.bestScore ?? score;
+      const lastAttemptAt = currentSkillMemory?.lastAttemptAt ?? null;
+
+      recordRetentionDataPoint(
+        supabase,
+        currentPlayer.id,
+        game.skillCategory,
+        score,
+        bestScore,
+        lastAttemptAt
+      ).catch(err => console.warn('Retention recording failed:', err));
+
+      // Get retention stats for feedback (if enough data)
+      retentionStats = await getRetentionStats(
+        supabase,
+        currentPlayer.id,
+        game.skillCategory
+      );
+
+      if (retentionStats) {
+        const retentionFeedback = formatRetentionFeedback(retentionStats);
+        if (retentionFeedback) {
+          spacedRepetitionHtml += retentionFeedback;
+        }
+
+        console.log(`Retention stats for ${currentPlayer.id}/${game.skillCategory}: ` +
+          `rate=${Math.round(retentionStats.retentionRate * 100)}%, ` +
+          `trend=${retentionStats.trend}, ` +
+          `optimalInterval=${retentionStats.optimalReviewInterval}d`);
+      }
+
     } catch (srErr) {
       console.warn('Spaced repetition update failed:', srErr);
       // Continue without spaced repetition feedback
     }
+
+    // Use bonus-adjusted score for total player score
+    const scoreForTotal = finalScoreWithBonus;
 
     // Historical delta vs last attempt on this game
     const gameAttempts = currentPlayer.attempts.filter(a => a.gameId === gameId);
@@ -1325,7 +1683,7 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
     const updatedAttempts = [...(currentPlayer.attempts || []), attempt];
     const updatedPlayer: Player = {
       ...currentPlayer,
-      score: currentPlayer.score + score,
+      score: currentPlayer.score + scoreForTotal, // Use bonus-adjusted score
       attempts: updatedAttempts,
       pinHash: currentPlayer.pinHash,
     };
@@ -1628,6 +1986,16 @@ Keep feedback concise, structured, and in HTML (no markdown fences).
       score,
       feedback: finalFeedback,
       player: mapPlayer(savedPlayer),
+      // v3.1 additions: XP bonus and review mode info
+      xpBonus: xpBonusResult ? {
+        baseScore: xpBonusResult.baseScore,
+        bonusXp: xpBonusResult.bonusXp,
+        totalXp: xpBonusResult.totalXp,
+      } : null,
+      reviewMode: reviewModeResult?.isReviewMode ? {
+        originalScore: reviewModeResult.originalScore,
+        xpContribution: reviewModeResult.xpContribution,
+      } : null,
     });
   } catch (error: unknown) {
     console.error('submitAttempt error:', error);

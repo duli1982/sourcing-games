@@ -83,7 +83,46 @@ export const REFERENCE_CONFIG = {
   // Bonus weight when we have many high-quality references
   bonusWeightPerVerified: 0.01,
   maxBonusWeight: 0.05,
+
+  // ========================================================================
+  // CROSS-GAME SHARING - Use references from same skill category as fallback
+  // ========================================================================
+  crossGame: {
+    enabled: true,
+    // Minimum references needed before using cross-game fallback
+    minGameReferencesBeforeFallback: 3,
+    // How many cross-game references to fetch
+    maxCrossGameReferences: 15,
+    // Similarity penalty for cross-game references (different game context)
+    crossGameSimilarityPenalty: 0.10,
+    // Weight reduction for cross-game scoring
+    crossGameWeightMultiplier: 0.7,
+    // Minimum similarity after penalty to count as valid
+    minCrossGameSimilarity: 0.60,
+    // Prefer same difficulty level
+    preferSameDifficulty: true,
+    // Bonus for same difficulty
+    sameDifficultyBonus: 0.05,
+  },
 };
+
+// Extended types for cross-game references
+export interface CrossGameReference extends SimilarReference {
+  originalGameId: string;
+  originalGameTitle: string;
+  skillCategory: string;
+  difficulty?: string;
+  isCrossGame: boolean;
+  adjustedSimilarity: number;
+}
+
+export interface CrossGameReferenceResult {
+  references: CrossGameReference[];
+  sourceGames: string[];
+  totalFromCurrentGame: number;
+  totalFromCrossGame: number;
+  usedCrossGameFallback: boolean;
+}
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -265,6 +304,315 @@ export const getReferenceStats = async (
     console.error('Error getting reference stats:', err);
     return null;
   }
+};
+
+// ============================================================================
+// CROSS-GAME REFERENCE SHARING
+// When a game has few/no references, use references from same skill category
+// ============================================================================
+
+/**
+ * Find references from other games in the same skill category
+ * Used as fallback when current game has insufficient references
+ */
+export const findCrossGameReferences = async (
+  supabase: SupabaseClient,
+  currentGameId: string,
+  skillCategory: string,
+  queryEmbedding: number[],
+  currentDifficulty?: string,
+  options: {
+    limit?: number;
+    minScore?: number;
+    excludeGameIds?: string[];
+  } = {}
+): Promise<CrossGameReference[]> => {
+  const {
+    limit = REFERENCE_CONFIG.crossGame.maxCrossGameReferences,
+    minScore = REFERENCE_CONFIG.minScoreThreshold,
+    excludeGameIds = [],
+  } = options;
+
+  const config = REFERENCE_CONFIG.crossGame;
+
+  try {
+    // Query references from same skill category but different games
+    const { data, error } = await supabase
+      .from('reference_answers')
+      .select('id, game_id, game_title, submission, score, embedding, source_type, is_verified, skill_category, difficulty')
+      .eq('skill_category', skillCategory)
+      .eq('is_active', true)
+      .neq('game_id', currentGameId)
+      .gte('score', minScore)
+      .limit(limit * 2); // Fetch extra for filtering
+
+    if (error) {
+      console.error('Cross-game reference query failed:', error);
+      return [];
+    }
+
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    // Filter out excluded games
+    const filtered = data.filter((row: any) => !excludeGameIds.includes(row.game_id));
+
+    // Calculate similarities in memory with cross-game adjustments
+    const withSimilarity: CrossGameReference[] = filtered
+      .filter((row: any) => row.embedding && Array.isArray(row.embedding))
+      .map((row: any) => {
+        const rawSimilarity = cosineSimilarity(queryEmbedding, row.embedding);
+
+        // Apply cross-game penalty
+        let adjustedSimilarity = rawSimilarity - config.crossGameSimilarityPenalty;
+
+        // Bonus for same difficulty level
+        if (config.preferSameDifficulty && currentDifficulty && row.difficulty === currentDifficulty) {
+          adjustedSimilarity += config.sameDifficultyBonus;
+        }
+
+        // Clamp to valid range
+        adjustedSimilarity = Math.max(0, Math.min(1, adjustedSimilarity));
+
+        return {
+          id: row.id,
+          gameId: currentGameId, // Report as current game for compatibility
+          originalGameId: row.game_id,
+          originalGameTitle: row.game_title || row.game_id,
+          submission: row.submission,
+          score: row.score,
+          similarity: rawSimilarity,
+          adjustedSimilarity,
+          sourceType: row.source_type,
+          isVerified: row.is_verified,
+          skillCategory: row.skill_category,
+          difficulty: row.difficulty,
+          isCrossGame: true,
+        };
+      })
+      // Filter by minimum adjusted similarity
+      .filter(ref => ref.adjustedSimilarity >= config.minCrossGameSimilarity)
+      // Sort by adjusted similarity
+      .sort((a, b) => b.adjustedSimilarity - a.adjustedSimilarity)
+      .slice(0, limit);
+
+    return withSimilarity;
+  } catch (err) {
+    console.error('Error finding cross-game references:', err);
+    return [];
+  }
+};
+
+/**
+ * Get combined references: current game + cross-game fallback if needed
+ * This is the main entry point for cross-game reference sharing
+ */
+export const findReferencesWithCrossGameFallback = async (
+  supabase: SupabaseClient,
+  gameId: string,
+  skillCategory: string,
+  queryEmbedding: number[],
+  difficulty?: string,
+  options: {
+    limit?: number;
+    minScore?: number;
+  } = {}
+): Promise<CrossGameReferenceResult> => {
+  const {
+    limit = REFERENCE_CONFIG.maxReferencesToCompare,
+    minScore = REFERENCE_CONFIG.minScoreThreshold,
+  } = options;
+
+  const config = REFERENCE_CONFIG.crossGame;
+
+  // First, try to get references from current game
+  const gameReferences = await findSimilarReferences(supabase, gameId, queryEmbedding, {
+    limit,
+    minScore,
+  });
+
+  // Convert to CrossGameReference format
+  const gameRefs: CrossGameReference[] = gameReferences.map(ref => ({
+    ...ref,
+    originalGameId: ref.gameId,
+    originalGameTitle: '',
+    skillCategory,
+    difficulty,
+    isCrossGame: false,
+    adjustedSimilarity: ref.similarity,
+  }));
+
+  // Check if we need cross-game fallback
+  const needsCrossGame = config.enabled &&
+    gameRefs.length < config.minGameReferencesBeforeFallback;
+
+  let crossGameRefs: CrossGameReference[] = [];
+  if (needsCrossGame) {
+    console.log(`[CrossGame] Game ${gameId} has ${gameRefs.length} references, fetching cross-game fallback`);
+
+    crossGameRefs = await findCrossGameReferences(
+      supabase,
+      gameId,
+      skillCategory,
+      queryEmbedding,
+      difficulty,
+      {
+        limit: limit - gameRefs.length,
+        minScore,
+        excludeGameIds: [gameId],
+      }
+    );
+
+    console.log(`[CrossGame] Found ${crossGameRefs.length} cross-game references from skill category "${skillCategory}"`);
+  }
+
+  // Combine and sort by adjusted similarity
+  const allRefs = [...gameRefs, ...crossGameRefs]
+    .sort((a, b) => b.adjustedSimilarity - a.adjustedSimilarity)
+    .slice(0, limit);
+
+  // Get unique source games
+  const sourceGames = [...new Set(crossGameRefs.map(r => r.originalGameId))];
+
+  return {
+    references: allRefs,
+    sourceGames,
+    totalFromCurrentGame: gameRefs.length,
+    totalFromCrossGame: crossGameRefs.length,
+    usedCrossGameFallback: crossGameRefs.length > 0,
+  };
+};
+
+/**
+ * Calculate multi-reference score with cross-game support
+ * Enhanced version that uses cross-game references when needed
+ */
+export const calculateMultiReferenceScoreWithCrossGame = async (
+  supabase: SupabaseClient,
+  gameId: string,
+  skillCategory: string,
+  submissionEmbedding: number[],
+  difficulty?: string,
+  options: {
+    minScore?: number;
+    limit?: number;
+  } = {}
+): Promise<MultiReferenceScoreResult & { crossGameInfo: CrossGameReferenceResult }> => {
+  const crossGameResult = await findReferencesWithCrossGameFallback(
+    supabase,
+    gameId,
+    skillCategory,
+    submissionEmbedding,
+    difficulty,
+    options
+  );
+
+  const references = crossGameResult.references;
+
+  if (references.length === 0) {
+    return {
+      averageSimilarity: 0,
+      bestMatchSimilarity: 0,
+      bestMatchScore: 0,
+      matchCount: 0,
+      weightedScore: 0,
+      percentileEstimate: 50,
+      references: references.map(r => ({
+        id: r.id,
+        gameId: r.gameId,
+        submission: r.submission,
+        score: r.score,
+        similarity: r.adjustedSimilarity, // Use adjusted for cross-game
+        sourceType: r.sourceType,
+        isVerified: r.isVerified,
+      })),
+      crossGameInfo: crossGameResult,
+    };
+  }
+
+  // Use adjusted similarities for scoring
+  const similarities = references.map(r => r.adjustedSimilarity);
+  const avgSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
+  const bestMatch = references[0];
+  const goodMatches = references.filter(r =>
+    r.adjustedSimilarity >= REFERENCE_CONFIG.minSimilarityThreshold
+  );
+
+  // Weighted score with cross-game weight reduction
+  let weightedScores = references.map(r => {
+    let weight = r.adjustedSimilarity;
+    // Apply additional weight reduction for cross-game references
+    if (r.isCrossGame) {
+      weight *= REFERENCE_CONFIG.crossGame.crossGameWeightMultiplier;
+    }
+    return weight * r.score;
+  });
+  const totalWeight = references.reduce((sum, r) => {
+    let w = r.adjustedSimilarity;
+    if (r.isCrossGame) w *= REFERENCE_CONFIG.crossGame.crossGameWeightMultiplier;
+    return sum + w;
+  }, 0);
+
+  const weightedScore = totalWeight > 0
+    ? weightedScores.reduce((a, b) => a + b, 0) / totalWeight
+    : 0;
+
+  // Estimate percentile
+  const percentileEstimate = Math.min(99, Math.max(1, Math.round(
+    (avgSimilarity * 50) +
+    (bestMatch.adjustedSimilarity * 30) +
+    (goodMatches.length / references.length * 20)
+  )));
+
+  return {
+    averageSimilarity: avgSimilarity,
+    bestMatchSimilarity: bestMatch.adjustedSimilarity,
+    bestMatchScore: bestMatch.score,
+    matchCount: goodMatches.length,
+    weightedScore,
+    percentileEstimate,
+    references: references.map(r => ({
+      id: r.id,
+      gameId: r.gameId,
+      submission: r.submission,
+      score: r.score,
+      similarity: r.adjustedSimilarity,
+      sourceType: r.sourceType,
+      isVerified: r.isVerified,
+    })),
+    crossGameInfo: crossGameResult,
+  };
+};
+
+/**
+ * Format cross-game reference feedback for display
+ */
+export const formatCrossGameFeedback = (
+  crossGameInfo: CrossGameReferenceResult,
+  avgSimilarity: number
+): string => {
+  if (!crossGameInfo.usedCrossGameFallback) {
+    return '';
+  }
+
+  const sourceCount = crossGameInfo.sourceGames.length;
+  const crossCount = crossGameInfo.totalFromCrossGame;
+
+  return `
+<div style="background:#1e293b;padding:10px;border-radius:8px;border:1px solid #6366f1;margin-bottom:10px;">
+  <p><strong>Cross-Game Analysis</strong></p>
+  <p style="font-size:0.9em;color:#a5b4fc;">
+    This game has limited reference data, so we compared your submission against
+    <strong>${crossCount}</strong> high-scoring submissions from
+    <strong>${sourceCount}</strong> related game${sourceCount !== 1 ? 's' : ''}
+    in the same skill category.
+  </p>
+  <p style="font-size:0.85em;color:#94a3b8;margin-top:6px;">
+    Average similarity: ${(avgSimilarity * 100).toFixed(1)}%
+    (Note: Cross-game comparisons are weighted lower than same-game comparisons)
+  </p>
+</div>`;
 };
 
 /**
@@ -542,6 +890,275 @@ export const formatMultiReferenceFeedback = (
 </div>`;
 };
 
+// ============================================================================
+// REFERENCE SEEDING - NEW: Utilities for seeding games with curated examples
+// ============================================================================
+
+export interface SeedReferenceInput {
+  gameId: string;
+  gameTitle: string;
+  submission: string;
+  score: number;
+  skillCategory?: string;
+  difficulty?: string;
+  notes?: string; // Admin notes about why this is a good example
+}
+
+export interface SeedResult {
+  gameId: string;
+  success: boolean;
+  referenceId?: string;
+  error?: string;
+}
+
+/**
+ * Seed a single game with a curated reference answer
+ * Requires embedding generation (pass the embedding function)
+ */
+export const seedReferenceAnswer = async (
+  supabase: SupabaseClient,
+  input: SeedReferenceInput,
+  embedding: number[],
+  verifyImmediately: boolean = true
+): Promise<SeedResult> => {
+  try {
+    // Use the existing add function with curated source type
+    const result = await addReferenceAnswer(supabase, {
+      gameId: input.gameId,
+      gameTitle: input.gameTitle,
+      submission: input.submission,
+      score: input.score,
+      embedding,
+      sourceType: 'curated',
+      skillCategory: input.skillCategory,
+      difficulty: input.difficulty,
+    });
+
+    if (!result.added || !result.id) {
+      return {
+        gameId: input.gameId,
+        success: false,
+        error: result.reason || 'Failed to add reference',
+      };
+    }
+
+    // If verify immediately, mark as verified
+    if (verifyImmediately) {
+      await supabase
+        .from('reference_answers')
+        .update({
+          is_verified: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', result.id);
+    }
+
+    return {
+      gameId: input.gameId,
+      success: true,
+      referenceId: result.id,
+    };
+  } catch (err) {
+    console.error(`Error seeding reference for ${input.gameId}:`, err);
+    return {
+      gameId: input.gameId,
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error',
+    };
+  }
+};
+
+/**
+ * Batch seed multiple games with curated references
+ * Returns summary of successes and failures
+ */
+export const seedMultipleReferences = async (
+  supabase: SupabaseClient,
+  inputs: Array<SeedReferenceInput & { embedding: number[] }>,
+  verifyImmediately: boolean = true
+): Promise<{
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: SeedResult[];
+}> => {
+  const results: SeedResult[] = [];
+
+  for (const input of inputs) {
+    const result = await seedReferenceAnswer(
+      supabase,
+      input,
+      input.embedding,
+      verifyImmediately
+    );
+    results.push(result);
+  }
+
+  return {
+    total: results.length,
+    succeeded: results.filter(r => r.success).length,
+    failed: results.filter(r => !r.success).length,
+    results,
+  };
+};
+
+/**
+ * Get games that have no reference answers (need seeding)
+ */
+export const getGamesNeedingSeeding = async (
+  supabase: SupabaseClient,
+  allGameIds: string[]
+): Promise<string[]> => {
+  try {
+    // Get games that already have references
+    const { data, error } = await supabase
+      .from('reference_answers')
+      .select('game_id')
+      .eq('is_active', true);
+
+    if (error) {
+      console.error('Error checking existing references:', error);
+      return allGameIds; // Assume all need seeding if we can't check
+    }
+
+    const gamesWithRefs = new Set((data || []).map((r: any) => r.game_id));
+
+    // Return games without any references
+    return allGameIds.filter(id => !gamesWithRefs.has(id));
+  } catch (err) {
+    console.error('Error getting games needing seeding:', err);
+    return allGameIds;
+  }
+};
+
+/**
+ * Lower the score threshold temporarily for new games
+ * Useful when bootstrapping the reference database
+ */
+export const getBootstrapConfig = (isNewGame: boolean): typeof REFERENCE_CONFIG => {
+  if (!isNewGame) {
+    return REFERENCE_CONFIG;
+  }
+
+  // For new games, temporarily accept lower scores
+  return {
+    ...REFERENCE_CONFIG,
+    minScoreThreshold: 70, // Lowered from 80
+    minSimilarityThreshold: 0.65, // Lowered from 0.70
+  };
+};
+
+/**
+ * Promote a player submission to a verified reference
+ * Useful when admins identify high-quality submissions
+ */
+export const promoteToVerifiedReference = async (
+  supabase: SupabaseClient,
+  referenceId: string,
+  promotedBy?: string
+): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('reference_answers')
+      .update({
+        is_verified: true,
+        source_type: 'curated', // Upgrade from player to curated
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', referenceId);
+
+    if (error) {
+      console.error('Error promoting reference:', error);
+      return false;
+    }
+
+    console.log(`Reference ${referenceId} promoted to verified${promotedBy ? ` by ${promotedBy}` : ''}`);
+    return true;
+  } catch (err) {
+    console.error('Error promoting reference:', err);
+    return false;
+  }
+};
+
+/**
+ * Get seeding status summary for all games
+ */
+export const getSeedingStatus = async (
+  supabase: SupabaseClient,
+  allGameIds: string[]
+): Promise<{
+  seeded: number;
+  needsSeeding: number;
+  gamesByStatus: {
+    wellSeeded: string[]; // 5+ references
+    partiallySeeded: string[]; // 1-4 references
+    notSeeded: string[]; // 0 references
+  };
+}> => {
+  try {
+    const { data, error } = await supabase
+      .from('reference_answers')
+      .select('game_id')
+      .eq('is_active', true);
+
+    if (error) {
+      console.error('Error getting seeding status:', error);
+      return {
+        seeded: 0,
+        needsSeeding: allGameIds.length,
+        gamesByStatus: {
+          wellSeeded: [],
+          partiallySeeded: [],
+          notSeeded: allGameIds,
+        },
+      };
+    }
+
+    // Count references per game
+    const refCounts = new Map<string, number>();
+    for (const row of data || []) {
+      const gameId = row.game_id as string;
+      refCounts.set(gameId, (refCounts.get(gameId) || 0) + 1);
+    }
+
+    const wellSeeded: string[] = [];
+    const partiallySeeded: string[] = [];
+    const notSeeded: string[] = [];
+
+    for (const gameId of allGameIds) {
+      const count = refCounts.get(gameId) || 0;
+      if (count >= 5) {
+        wellSeeded.push(gameId);
+      } else if (count > 0) {
+        partiallySeeded.push(gameId);
+      } else {
+        notSeeded.push(gameId);
+      }
+    }
+
+    return {
+      seeded: wellSeeded.length + partiallySeeded.length,
+      needsSeeding: notSeeded.length,
+      gamesByStatus: {
+        wellSeeded,
+        partiallySeeded,
+        notSeeded,
+      },
+    };
+  } catch (err) {
+    console.error('Error getting seeding status:', err);
+    return {
+      seeded: 0,
+      needsSeeding: allGameIds.length,
+      gamesByStatus: {
+        wellSeeded: [],
+        partiallySeeded: [],
+        notSeeded: allGameIds,
+      },
+    };
+  }
+};
+
 export default {
   findSimilarReferences,
   getReferenceStats,
@@ -551,4 +1168,16 @@ export default {
   formatMultiReferenceFeedback,
   cosineSimilarity,
   REFERENCE_CONFIG,
+  // Seeding utilities
+  seedReferenceAnswer,
+  seedMultipleReferences,
+  getGamesNeedingSeeding,
+  getBootstrapConfig,
+  promoteToVerifiedReference,
+  getSeedingStatus,
+  // NEW: Cross-game reference sharing
+  findCrossGameReferences,
+  findReferencesWithCrossGameFallback,
+  calculateMultiReferenceScoreWithCrossGame,
+  formatCrossGameFeedback,
 };

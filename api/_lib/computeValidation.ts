@@ -11,6 +11,11 @@ import { validatePassiveCandidateSequence } from '../../utils/passiveCandidateSe
 import { validateGithubSourcing } from '../../utils/githubSourcingValidator.js';
 import { validateStackOverflowSourcing } from '../../utils/stackOverflowSourcingValidator.js';
 import { validateRedditSourcing } from '../../utils/redditSourcingValidator.js';
+import { validateLinkedinSourcing } from '../../utils/linkedinSourcingValidator.js';
+import { validateScreeningQuestions } from '../../utils/screeningValidator.js';
+import { validateJobDescription } from '../../utils/jobDescriptionValidator.js';
+import { validateNegotiation } from '../../utils/negotiationValidator.js';
+import { validateTalentIntelligence } from '../../utils/talentIntelligenceValidator.js';
 
 export type ServerValidationResult = {
   score: number;
@@ -189,6 +194,92 @@ export const computeServerValidation = (game: any, submission: string): ServerVa
       strengths: [
         ...(platformValidation.strengths.length > 0 ? [`バ. ${platformName} Sourcing:`, ...platformValidation.strengths] : []),
         ...(dataDrivenValidation.strengths.length > 0 ? ['dY"S Quantitative Thinking:', ...dataDrivenValidation.strengths] : []),
+      ],
+    });
+  }
+
+  // LinkedIn sourcing validation
+  if (game?.skillCategory === 'linkedin') {
+    const linkedinValidation = validateLinkedinSourcing(submission);
+    const dataDrivenValidation = validateDataDrivenSourcing(submission);
+
+    return normalizeValidation({
+      score: linkedinValidation.score * 0.7 + dataDrivenValidation.score * 0.3,
+      checks: { ...linkedinValidation.checks, ...dataDrivenValidation.checks },
+      feedback: [
+        ...(linkedinValidation.feedback.length > 0 ? ['🔗 LinkedIn Strategy:', ...linkedinValidation.feedback] : []),
+        ...(dataDrivenValidation.feedback.length > 0 ? ['📊 Data & Metrics:', ...dataDrivenValidation.feedback] : []),
+      ],
+      strengths: [
+        ...(linkedinValidation.strengths.length > 0 ? ['✅ LinkedIn Sourcing:', ...linkedinValidation.strengths] : []),
+        ...(dataDrivenValidation.strengths.length > 0 ? ['📊 Quantitative Thinking:', ...dataDrivenValidation.strengths] : []),
+      ],
+    });
+  }
+
+  // Screening questions validation
+  if (game?.skillCategory === 'screening') {
+    const screeningValidation = validateScreeningQuestions(submission);
+
+    return normalizeValidation({
+      score: screeningValidation.score,
+      checks: screeningValidation.checks,
+      feedback: screeningValidation.feedback.length > 0
+        ? ['📋 Screening Questions:', ...screeningValidation.feedback]
+        : [],
+      strengths: screeningValidation.strengths.length > 0
+        ? ['✅ Interview Design:', ...screeningValidation.strengths]
+        : [],
+    });
+  }
+
+  // Job description validation
+  if (game?.skillCategory === 'job-description') {
+    const jdValidation = validateJobDescription(submission);
+
+    return normalizeValidation({
+      score: jdValidation.score,
+      checks: jdValidation.checks,
+      feedback: jdValidation.feedback.length > 0
+        ? ['📝 Job Description:', ...jdValidation.feedback]
+        : [],
+      strengths: jdValidation.strengths.length > 0
+        ? ['✅ JD Quality:', ...jdValidation.strengths]
+        : [],
+    });
+  }
+
+  // Negotiation validation
+  if (game?.skillCategory === 'negotiation') {
+    const negotiationValidation = validateNegotiation(submission);
+
+    return normalizeValidation({
+      score: negotiationValidation.score,
+      checks: negotiationValidation.checks,
+      feedback: negotiationValidation.feedback.length > 0
+        ? ['🤝 Negotiation Strategy:', ...negotiationValidation.feedback]
+        : [],
+      strengths: negotiationValidation.strengths.length > 0
+        ? ['✅ Offer Negotiation:', ...negotiationValidation.strengths]
+        : [],
+    });
+  }
+
+  // Talent intelligence validation
+  if (game?.skillCategory === 'talent-intelligence') {
+    const talentIntelValidation = validateTalentIntelligence(submission);
+    const dataDrivenValidation = validateDataDrivenSourcing(submission);
+
+    return normalizeValidation({
+      score: talentIntelValidation.score * 0.7 + dataDrivenValidation.score * 0.3,
+      checks: { ...talentIntelValidation.checks, ...dataDrivenValidation.checks },
+      feedback: [
+        ...(talentIntelValidation.feedback.length > 0 ? ['🎯 Talent Intelligence:', ...talentIntelValidation.feedback] : []),
+        ...(dataDrivenValidation.feedback.length > 0 ? ['📊 Data & Metrics:', ...dataDrivenValidation.feedback] : []),
+      ],
+      strengths: [
+        ...(talentIntelValidation.strengths.length > 0 ? ['✅ Market Analysis:', ...talentIntelValidation.strengths] : []),
+        ...(dataDrivenValidation.strengths.length > 0 ? ['📊 Quantitative Thinking:', ...dataDrivenValidation.strengths] : []),
       ],
     });
   }
