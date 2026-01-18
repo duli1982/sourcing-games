@@ -45,7 +45,7 @@ export interface ChatMessage {
   isTyping?: boolean;
 }
 
-export type Difficulty = 'easy' | 'medium' | 'hard';
+export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
 
 export interface RubricItem {
   criteria: string;

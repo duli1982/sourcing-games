@@ -609,7 +609,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ai_score: number | null;
         validation_score: number | null;
       };
-      const flags = analyzeRubricFlags((data || []) as RubricScoreRow[]);
+      const rows = (data || []) as RubricScoreRow[];
+      const normalized = rows.map(row => ({
+        ...row,
+        game_title: row.game_title ?? row.game_id,
+      }));
+      const flags = analyzeRubricFlags(normalized);
       return res.status(200).json({ flags });
     }
 

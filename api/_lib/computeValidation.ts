@@ -19,7 +19,7 @@ import { validateTalentIntelligence } from '../../utils/talentIntelligenceValida
 
 export type ServerValidationResult = {
   score: number;
-  checks?: Record<string, boolean>;
+  checks: Record<string, boolean>;
   feedback: string[];
   strengths: string[];
 };

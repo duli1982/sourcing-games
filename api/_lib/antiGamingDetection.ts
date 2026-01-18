@@ -1273,6 +1273,25 @@ export const buildPlayerStyleProfile = async (
 /**
  * Analyze writing style of a single submission
  */
+const FORMALITY_INDICATORS = [
+  /\b(therefore|thus|hence|consequently|accordingly)\b/gi,
+  /\b(shall|ought|must|hereby)\b/gi,
+  /\b(aforementioned|hereunder|therein|whereby)\b/gi,
+];
+
+const calculateFormalityScore = (text: string): number => {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return 0;
+
+  let formalityCount = 0;
+  for (const pattern of FORMALITY_INDICATORS) {
+    const matches = text.match(pattern);
+    formalityCount += matches ? matches.length : 0;
+  }
+
+  return Math.min(1, formalityCount / (words.length / 50));
+};
+
 const analyzeSubmissionStyle = (submission: string): {
   wordCount: number;
   avgSentenceLength: number;

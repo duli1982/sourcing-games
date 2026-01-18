@@ -10,7 +10,9 @@
  * @version 1.0.0
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+type AnySupabaseClient = SupabaseClient<any, any, any, any, any>;
 
 // ============================================================================
 // Types
@@ -137,7 +139,7 @@ export interface DisagreementRecord {
  * This is the main function to call after scoring is complete
  */
 export async function logScoringAnalytics(
-  supabase: SupabaseClient,
+  supabase: AnySupabaseClient,
   input: ScoringAnalyticsInput
 ): Promise<{ analyticsId: string | null; error: string | null }> {
   try {
@@ -201,7 +203,7 @@ export async function logScoringAnalytics(
 /**
  * Update game scoring stats asynchronously
  */
-async function updateGameStatsAsync(supabase: SupabaseClient, gameId: string): Promise<void> {
+async function updateGameStatsAsync(supabase: AnySupabaseClient, gameId: string): Promise<void> {
   try {
     const { error } = await supabase.rpc('update_game_scoring_stats', {
       p_game_id: gameId,
@@ -219,7 +221,7 @@ async function updateGameStatsAsync(supabase: SupabaseClient, gameId: string): P
  * Update player history asynchronously
  */
 async function updatePlayerHistoryAsync(
-  supabase: SupabaseClient,
+  supabase: AnySupabaseClient,
   playerId: string,
   playerName?: string
 ): Promise<void> {
@@ -245,7 +247,7 @@ async function updatePlayerHistoryAsync(
  * Get game scoring statistics
  */
 export async function getGameScoringStats(
-  supabase: SupabaseClient,
+  supabase: AnySupabaseClient,
   gameId: string
 ): Promise<GameScoringStats | null> {
   try {
@@ -309,7 +311,7 @@ export async function getGameScoringStats(
  * Get all games that need rubric review
  */
 export async function getGamesNeedingReview(
-  supabase: SupabaseClient
+  supabase: AnySupabaseClient
 ): Promise<GameScoringStats[]> {
   try {
     const { data, error } = await supabase.rpc('get_games_needing_review');
@@ -341,7 +343,7 @@ export async function getGamesNeedingReview(
  * Get player scoring history
  */
 export async function getPlayerHistory(
-  supabase: SupabaseClient,
+  supabase: AnySupabaseClient,
   playerId: string
 ): Promise<PlayerHistory | null> {
   try {
@@ -387,7 +389,7 @@ export async function getPlayerHistory(
  * Get unreviewed disagreements for a game
  */
 export async function getUnreviewedDisagreements(
-  supabase: SupabaseClient,
+  supabase: AnySupabaseClient,
   gameId?: string,
   limit: number = 50
 ): Promise<DisagreementRecord[]> {
@@ -441,7 +443,7 @@ export async function getUnreviewedDisagreements(
  * Mark a disagreement as reviewed
  */
 export async function markDisagreementReviewed(
-  supabase: SupabaseClient,
+  supabase: AnySupabaseClient,
   disagreementId: string,
   reviewedBy: string,
   reviewNotes?: string,
@@ -479,7 +481,7 @@ export async function markDisagreementReviewed(
  * Get overall scoring analytics summary
  */
 export async function getAnalyticsSummary(
-  supabase: SupabaseClient
+  supabase: AnySupabaseClient
 ): Promise<{
   totalAttempts: number;
   totalGames: number;
@@ -598,7 +600,7 @@ export interface ScoreVarianceStats {
  * Get games with high score variance that may need rubric tuning
  */
 export async function getGamesWithHighVariance(
-  supabase: SupabaseClient,
+  supabase: AnySupabaseClient,
   minSamples: number = 20
 ): Promise<ScoreVarianceStats[]> {
   try {
@@ -742,7 +744,7 @@ function calculateCorrelation(x: number[], y: number[]): number {
  * Get variance summary for dashboard display
  */
 export async function getVarianceSummary(
-  supabase: SupabaseClient
+  supabase: AnySupabaseClient
 ): Promise<{
   gamesWithHighVariance: number;
   gamesNeedingInvestigation: number;

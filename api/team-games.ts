@@ -102,7 +102,8 @@ const GEMINI_RESPONSE_SCHEMA = {
 const parseAiResponseStrict = (rawText: string): { score: number; feedback: string; rubricBreakdown: RubricBreakdown } => {
   const parsed = parseAiResponseWithSchema(rawText);
   if (!parsed.success) {
-    throw new Error(parsed.error);
+    const error = (parsed as { success: false; error: string }).error;
+    throw new Error(error);
   }
   const normalizedScore = Math.max(0, Math.min(100, Math.round(parsed.data.score)));
   return { score: normalizedScore, feedback: parsed.data.feedback, rubricBreakdown: parsed.data.rubricBreakdown || {} };

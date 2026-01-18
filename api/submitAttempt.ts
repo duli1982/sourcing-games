@@ -93,6 +93,7 @@ import {
   formatRubricValidationFeedback,
   calculateCorrectedScore,
   getRubricBreakdownSummary,
+  type AiRubricBreakdown,
   type RubricValidationResult,
 } from './_lib/rubricAggregation.js';
 import {
@@ -184,13 +185,16 @@ type PlayerRow = {
   progress?: { attempts?: Attempt[]; achievements?: Player['achievements']; pinHash?: string | null };
 };
 
-type EmbedContentRequest = {
-  model: string;
-  content: { parts: Array<{ text: string }> };
-};
-
 type EmbeddingResponse = {
   embedding?: { values?: number[] };
+};
+
+type ChallengeRow = {
+  id: string;
+  challenger_id: string;
+  challenged_id: string;
+  challenger_score: number | null;
+  challenged_score: number | null;
 };
 
 type GenerateContentRequest = {
@@ -218,7 +222,7 @@ const getSupabase = () => {
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     throw new Error('Supabase service credentials are not configured');
   }
-  return createClient(supabaseUrl, supabaseServiceRoleKey);
+  return createClient<any>(supabaseUrl, supabaseServiceRoleKey);
 };
 
 const mapPlayer = (row: PlayerRow): Player => ({
@@ -242,8 +246,8 @@ const extractGeminiText = (response: GeminiResponse | unknown): string | undefin
 const getEmbeddingValues = async (ai: GoogleGenAI, text: string): Promise<number[]> => {
   const response = await ai.models.embedContent({
     model: 'text-embedding-004',
-    content: { parts: [{ text }] }
-  } as EmbedContentRequest);
+    contents: { parts: [{ text }] },
+  });
   const typed = response as EmbeddingResponse;
   const values = typed.embedding?.values;
   return Array.isArray(values) ? values : [];
@@ -257,7 +261,7 @@ const submitChallengeScoreIfNeeded = async (
 ): Promise<void> => {
   try {
     const nowIso = new Date().toISOString();
-    const { data: challenges, error } = await supabase
+    const { data, error } = await supabase
       .from('challenges')
       .select('*')
       .eq('game_id', gameId)
@@ -272,7 +276,8 @@ const submitChallengeScoreIfNeeded = async (
       return;
     }
 
-    const pending = (challenges || []).find(c => (
+    const challenges = (data as ChallengeRow[] | null) || [];
+    const pending = challenges.find(c => (
       (c.challenger_id === playerId && c.challenger_score === null) ||
       (c.challenged_id === playerId && c.challenged_score === null)
     ));
@@ -334,10 +339,11 @@ const normalizeFeedbackHtml = (feedback: string): string => {
  * Extracts the JSON payload from the model response and validates it with Zod.
  * Throws on any schema violation to avoid silently accepting malformed output.
  */
-const parseAiResponseStrict = (rawText: string): { score: number; feedback: string; rubricBreakdown: RubricBreakdown } => {
+const parseAiResponseStrict = (rawText: string): { score: number; feedback: string; rubricBreakdown: AiRubricBreakdown } => {
   const parsed = parseAiResponseWithSchema(rawText);
   if (!parsed.success) {
-    throw new Error(parsed.error);
+    const error = (parsed as { success: false; error: string }).error;
+    throw new Error(error);
   }
 
   const normalizedScore = Math.max(0, Math.min(100, Math.round(parsed.data.score)));
@@ -840,7 +846,7 @@ ${ragRetrievalResult.context}
     // Strict JSON parsing with schema validation
     let score: number;
     let feedbackText: string;
-    let aiRubricBreakdown: RubricBreakdown | null = null;
+    let aiRubricBreakdown: AiRubricBreakdown | null = null;
     let usedAutomatedOnly = false;
 
     try {
@@ -854,8 +860,7 @@ ${ragRetrievalResult.context}
       console.error('Failed to parse AI response:', message);
       console.error('Raw AI response text:', responseText);
 
-      try {
-        const fallbackPrompt = promptCache.get(game.id) || `
+      const fallbackPrompt = promptCache.get(game.id) || `
 You are an AI coach. Skill level: ${userSkillLevel}.
 Submission: """${submission}"""
 Automated score: ${validation?.score ?? 'n/a'}
@@ -873,6 +878,7 @@ Return JSON only using this structure:
 }
 Keep feedback concise, structured, and in HTML (no markdown fences).
 `;
+      try {
         const retryResponse = await ai.models.generateContent({
           model: GEMINI_FALLBACK_MODEL,
           contents: [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
