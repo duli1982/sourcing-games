@@ -284,13 +284,13 @@ const submitChallengeScoreIfNeeded = async (
 
     if (!pending) return;
 
-    const updateData = pending.challenger_id === playerId
+    const updateData: Partial<ChallengeRow> = pending.challenger_id === playerId
       ? { challenger_score: score }
       : { challenged_score: score };
 
     const { error: updateError } = await supabase
       .from('challenges')
-      .update(updateData)
+      .update(updateData as Record<string, number>)
       .eq('id', pending.id);
 
     if (updateError) {

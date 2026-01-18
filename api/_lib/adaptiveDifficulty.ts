@@ -113,14 +113,15 @@ export const DIFFICULTY_CONFIG = {
     easy: 15,
     medium: 20,
     hard: 25,
+    expert: 30,
   },
 
   // Expected score ranges by player level and game difficulty
   expectedScores: {
-    beginner: { easy: [55, 75], medium: [40, 60], hard: [25, 45] },
-    intermediate: { easy: [70, 85], medium: [55, 75], hard: [40, 60] },
-    advanced: { easy: [80, 95], medium: [70, 85], hard: [55, 75] },
-    expert: { easy: [85, 100], medium: [80, 95], hard: [70, 90] },
+    beginner: { easy: [55, 75], medium: [40, 60], hard: [25, 45], expert: [15, 35] },
+    intermediate: { easy: [70, 85], medium: [55, 75], hard: [40, 60], expert: [30, 50] },
+    advanced: { easy: [80, 95], medium: [70, 85], hard: [55, 75], expert: [50, 70] },
+    expert: { easy: [85, 100], medium: [80, 95], hard: [70, 90], expert: [75, 95] },
   } as Record<string, Record<Difficulty, [number, number]>>,
 };
 

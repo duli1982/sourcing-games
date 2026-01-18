@@ -147,6 +147,20 @@ export const DEFAULT_BENCHMARKS: Record<Difficulty, DifficultyBenchmark> = {
     deviationThresholdSignificant: 10,
     deviationThresholdExtreme: 15,
   },
+  expert: {
+    difficulty: 'expert',
+    expectedAvgScore: 35,
+    expectedMedianScore: 38,
+    expectedStdDev: 20,
+    expectedP25: 25,
+    expectedP75: 50,
+    acceptableAvgMin: 25,
+    acceptableAvgMax: 45,
+    intermediatePlayerExpected: 40,
+    deviationThresholdMinor: 5,
+    deviationThresholdSignificant: 10,
+    deviationThresholdExtreme: 15,
+  },
 };
 
 // In-memory cache for calibration data

@@ -24,5 +24,11 @@ export const rubricByDifficulty: Record<Difficulty, RubricItem[]> = {
         { criteria: 'Sophisticated Boolean Logic', points: 30, description: 'Multi-level nesting, excludes false positives effectively' },
         { criteria: 'Advanced Search Techniques', points: 25, description: 'Uses proximity operators, wildcards, regex where applicable' },
         { criteria: 'Strategic Optimization', points: 20, description: 'Highly targeted, considers edge cases, minimal false positives' }
+    ],
+    expert: [
+        { criteria: 'Mastery Keyword Strategy', points: 25, description: 'Exhaustive terms including niche synonyms, certifications, and edge-case variants' },
+        { criteria: 'Precision Boolean Architecture', points: 30, description: 'Highly optimized nesting, exclusions, and sequencing for signal over noise' },
+        { criteria: 'Elite Search Techniques', points: 25, description: 'Advanced operators, proximity logic, and platform-specific tuning' },
+        { criteria: 'Strategic Optimization', points: 20, description: 'Minimal false positives, resilient to edge cases, reusable for scale' }
     ]
 };
