@@ -42,19 +42,19 @@
       /* Page Transitions */
       .pages-container {
         position: relative;
-        min-height: 70vh;
       }
       .page {
-        position: absolute;
-        inset: 0;
         opacity: 0;
         visibility: hidden;
         pointer-events: none;
         transform: translateY(6px);
         transition: opacity 300ms ease, transform 300ms ease, visibility 0ms linear 300ms;
         will-change: opacity, transform;
+        position: absolute;
+        inset: 0;
       }
       .page.active {
+        position: relative;
         opacity: 1;
         visibility: visible;
         pointer-events: auto;
