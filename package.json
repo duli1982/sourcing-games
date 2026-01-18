@@ -1,0 +1,33 @@
+{
+  "name": "ai-sourcing-league-game-quiz",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@google/genai": "^1.21.0",
+    "@supabase/supabase-js": "^2.55.3",
+    "@types/react-router-dom": "^5.3.3",
+    "@types/string-similarity": "^4.0.2",
+    "isomorphic-dompurify": "^2.34.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-helmet-async": "^2.0.5",
+    "react-is": "^19.2.3",
+    "react-router-dom": "^7.10.1",
+    "recharts": "^3.6.0",
+    "string-similarity": "^4.0.4",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vercel/node": "^3.0.10",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}

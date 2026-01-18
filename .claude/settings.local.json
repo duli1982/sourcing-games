@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git fetch:*)",
+      "Bash(git remote:*)",
+      "Bash(git init:*)",
+      "Bash(git branch:*)",
+      "Bash(npm install:*)",
+      "Bash(git checkout:*)",
+      "Bash(ls:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(python3:*)",
+      "Bash(node -e \"const fs=require\\(''fs''\\);const p=''c:/Users/Dule/Downloads/Vercel Ready/sourcingaigames-main ready - keep/data/teamGames.ts'';let c=fs.readFileSync\\(p,''utf8''\\);const count=c.split\\(''''''\\).length-1;console.log\\(''Curly apostrophes found:'',count\\);c=c.replace\\(/''/g,\"\"''\"\"\\);fs.writeFileSync\\(p,c,''utf8''\\);console.log\\(''Fixed!''\\);\")",
+      "Bash(node -e:*)",
+      "Bash(python:*)",
+      "Bash(npx tsc:*)",
+      "Bash(for file in utils/githubSourcingValidator.ts utils/stackOverflowSourcingValidator.ts utils/redditSourcingValidator.ts)",
+      "Bash(do python -c \"\nimport sys\nwith open\\(''$file'', ''r'', encoding=''utf-8''\\) as f:\n    content = f.read\\(\\)\ncontent = content.replace\\(''\\\\u2019'', \"\"''\"\"\\).replace\\(''\\\\u2018'', \"\"''\"\"\\).replace\\(''\\\\u201C'', ''\"\"''\\).replace\\(''\\\\u201D'', ''\"\"''\\)\nwith open\\(''$file'', ''w'', encoding=''utf-8''\\) as f:\n    f.write\\(content\\)\nprint\\(''Fixed: $file''\\)\n\")",
+      "Bash(done)",
+      "Bash(mkdir:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
