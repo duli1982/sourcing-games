@@ -254,7 +254,7 @@ const getEmbeddingValues = async (ai: GoogleGenAI, text: string): Promise<number
 };
 
 const submitChallengeScoreIfNeeded = async (
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   playerId: string,
   gameId: string,
   score: number
